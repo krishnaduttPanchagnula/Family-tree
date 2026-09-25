@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Family Tree Builder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+    <!-- Top header bar -->
+    <header class="app-header">
+        <div class="brand">
+            <span class="brand-logo">🌳</span>
+            <span class="brand-name">FAMILY TREE BUILDER</span>
+        </div>
+        <div class="storage-pills">
+            <button id="pillLocal" class="pill active" onclick="selectStorage('local')">Local Disk</button>
+            <button id="pillS3" class="pill" onclick="selectStorage('s3')">AWS S3</button>
+            <button id="pillDrive" class="pill" onclick="selectStorage('drive')">Google Drive</button>
+        </div>
+    </header>
+
+    <!-- Main app body: left info panel + canvas -->
+    <div class="app-body">
+
+        <!-- Left sidebar: selected person's details & tree actions -->
+        <aside id="sidebar" class="sidebar">
+            <button id="sidebarCollapseBtn" class="sidebar-collapse-btn" onclick="toggleSidebar()" title="Collapse panel">‹</button>
+
+            <!-- Shown when nothing is selected yet -->
+            <div id="sidebarEmpty" class="sidebar-empty">
+                <p>Select a person on the tree to view or edit their details.</p>
+                <p class="hint">Or start your tree from scratch:</p>
+                <button onclick="openQuickAdd(null, 'root')">+ Add Person</button>
+            </div>
+
+            <!-- Shown when a person is selected -->
+            <div id="sidebarContent" class="sidebar-content" style="display:none;">
+                <div class="sidebar-tabs">
+                    <button class="tab-btn active" data-tab="personal" onclick="switchTab('personal')">Personal</button>
+                    <button class="tab-btn" data-tab="biography" onclick="switchTab('biography')">Biography</button>
+                    <button class="tab-btn" data-tab="image" onclick="switchTab('image')">Image</button>
+                </div>
+
+                <div class="tab-panel" data-panel="personal">
+                    <label class="field-label">Name</label>
+                    <input type="text" id="fieldName">
+
+                    <label class="field-label">Date of birth</label>
+                    <input type="date" id="fieldDob">
+
+                    <label class="field-label">Date of death</label>
+                    <input type="date" id="fieldDod">
+
+                    <label class="field-label">Place of birth</label>
+                    <input type="text" id="fieldBirthCountry" placeholder="e.g. Dublin, Ireland">
+
+                    <label class="field-label">Profession</label>
+                    <input type="text" id="fieldProfession" placeholder="e.g. Teacher">
+                </div>
+
+                <div class="tab-panel" data-panel="biography" style="display:none;">
+                    <label class="field-label">Interesting facts</label>
+                    <textarea id="fieldFacts" rows="10" placeholder="Meet my mother! Edit her info and expand family connections via left menu."></textarea>
+                </div>
+
+                <div class="tab-panel" data-panel="image" style="display:none;">
+                    <div class="sidebar-photo-preview">
+                        <img id="sidebarPhotoPreview" src="" alt="preview">
+                    </div>
+                    <input type="file" id="sidebarPhotoInput" accept="image/*" onchange="handlePhotoFileChosen(this, 'sidebar')">
+                </div>
+
+                <div class="sidebar-actions">
+                    <button onclick="saveSelectedPerson()">💾 Save Person</button>
+
+                    <div class="sidebar-divider"></div>
+
+                    <button class="btn-outline" onclick="openQuickAdd(null, 'parent')">👪 Add Parents</button>
+                    <button class="btn-outline" onclick="openQuickAdd(null, 'sibling')">👬 Add Sibling</button>
+                    <button class="btn-outline" onclick="openQuickAdd(null, 'spouse')">💑 Add Partner</button>
+                    <button class="btn-outline" onclick="openQuickAdd(null, 'child')">🙂 Add Child</button>
+
+                    <div class="sidebar-divider"></div>
+
+                    <button class="btn-danger-outline" onclick="deleteSelectedPerson()">🚫 Delete Person</button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Canvas: the free-floating, zoomable, pannable tree -->
+        <main class="canvas-area">
+            <div id="treeCanvas" class="tree-canvas">
+                <div id="treeSizer" class="tree-sizer"></div>
+                <div id="treeViewport" class="tree-viewport">
+                    <svg id="treeLines" class="tree-lines"></svg>
+                    <div id="treeNodes" class="tree-nodes"></div>
+                </div>
+                <div id="canvasEmpty" class="empty-state" style="display:none;">No one on the tree yet. Add your first family member from the left panel.</div>
+            </div>
+
+            <!-- Floating toolbar, top-right of the canvas -->
+            <div class="floating-toolbar">
+                <button class="icon-btn" title="Zoom out" onclick="adjustZoom(-0.1)">🔍−</button>
+                <button class="icon-btn" title="Zoom in" onclick="adjustZoom(0.1)">🔍+</button>
+                <button class="icon-btn labeled" title="Recenter the current tree in view" onclick="centerTree()">◎ Recenter</button>
+                <button class="icon-btn labeled" title="Arrange people into parent-to-child generations" onclick="resetTreeLayout()">↧ Tree Layout</button>
+                <button class="icon-btn labeled" title="Check for app updates" onclick="checkForUpdates()">⬆ Update</button>
+                <button id="legendBtn" class="icon-btn labeled" title="Show relationship color legend" onclick="toggleLegend()">◐ Legend</button>
+                <label class="theme-picker" title="Change color theme">
+                    <span>Theme</span>
+                    <select id="themeSelect" onchange="applyTheme(this.value)">
+                        <option value="white">White</option>
+                        <option value="black">Black</option>
+                        <option value="tokyo">Tokyo Night</option>
+                        <option value="sand">Sand</option>
+                        <option value="milan">Milan</option>
+                    </select>
+                </label>
+                <button class="icon-btn" title="Tree settings" onclick="openSettingsDialog()">⚙</button>
+                <button id="connectBtn" class="icon-btn labeled" title="Manually connect two existing people" onclick="toggleConnectMode()">⇄ Edit Connections</button>
+                <div class="dropdown">
+                    <button class="icon-btn labeled" onclick="toggleExportMenu()">⬇ Export ▾</button>
+                    <div id="exportMenu" class="dropdown-menu">
+                        <button onclick="exportImage('jpeg')">JPEG</button>
+                        <button onclick="exportImage('png')">PNG</button>
+                        <button onclick="exportImage('svg')">SVG</button>
+                    </div>
+                </div>
+                <button class="icon-btn" title="Refresh tree" onclick="loadTree()">⟳</button>
+            </div>
+
+            <div id="legendPanel" class="legend-panel" style="display:none;">
+                <div class="legend-title">Relationship Legend</div>
+                <div class="legend-item"><span class="legend-swatch root"></span><span>Root / default person</span></div>
+                <div class="legend-item"><span class="legend-swatch spouse"></span><span>Partner / spouse</span></div>
+                <div class="legend-item"><span class="legend-swatch parent"></span><span>Parent → child</span></div>
+                <div class="legend-item"><span class="legend-swatch sibling full"></span><span>Full sibling</span></div>
+                <div class="legend-item"><span class="legend-swatch sibling half"></span><span>Half sibling</span></div>
+                <div class="legend-item"><span class="legend-swatch sibling step"></span><span>Step sibling</span></div>
+            </div>
+
+            <div id="connectHint" class="connect-hint" style="display:none;">Edit Connections: click a person, then click a second person to link them. Click an existing line to remove it. <button class="link-btn" onclick="toggleConnectMode()">Done</button></div>
+
+            <button id="sidebarExpandBtn" class="sidebar-expand-btn" onclick="toggleSidebar()" title="Show panel" style="display:none;">›</button>
+        </main>
+    </div>
+
+    <!-- Quick add popover: root / parent / spouse / sibling / child -->
+    <dialog id="quickAddDialog">
+        <form method="dialog" class="dialog-form" onsubmit="event.preventDefault(); submitQuickAdd();">
+            <h3 id="quickAddTitle">Add Person</h3>
+            <div class="dialog-preview">
+                <img id="quickAddPreview" src="" alt="preview">
+            </div>
+            <input type="text" id="quickAddName" placeholder="Name" required>
+            <input type="file" id="quickAddPic" accept="image/*" onchange="previewQuickAddPhoto()">
+            <div id="quickAddSiblingRow" style="display:none;">
+                <select id="quickAddSiblingType">
+                    <option value="full">Full sibling (same parents)</option>
+                    <option value="half">Half sibling (one shared parent)</option>
+                    <option value="step">Step sibling (no shared parent)</option>
+                </select>
+            </div>
+            <div class="dialog-actions">
+                <button type="button" class="btn-secondary" onclick="closeQuickAdd()">Cancel</button>
+                <button type="submit">Add</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- Manually link two existing people (Edit Connections mode) -->
+    <dialog id="linkDialog">
+        <form method="dialog" class="dialog-form" onsubmit="event.preventDefault(); submitLinkDialog();">
+            <h3>Connect People</h3>
+            <p id="linkDialogNames" class="dialog-copy"></p>
+            <select id="linkRelationType">
+                <option value="a-parent-of-b">First person is the parent of the second</option>
+                <option value="b-parent-of-a">Second person is the parent of the first</option>
+                <option value="spouse">They are spouses</option>
+                <option value="sibling-full">Full siblings (same parents)</option>
+                <option value="sibling-half">Half siblings (one shared parent)</option>
+                <option value="sibling-step">Step siblings (no shared parent)</option>
+            </select>
+            <div class="dialog-actions">
+                <button type="button" class="btn-secondary" onclick="closeLinkDialog()">Cancel</button>
+                <button type="submit">Connect</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- Tree display settings -->
+    <dialog id="settingsDialog">
+        <div class="dialog-form">
+            <h3>Tree Settings</h3>
+            <label class="settings-label">Date format</label>
+            <select id="dateFormatSelect" onchange="applyDateFormat()">
+                <option value="dmy">DD/MM/YYYY</option>
+                <option value="mdy">MM/DD/YYYY</option>
+                <option value="ymd">YYYY-MM-DD</option>
+            </select>
+            <label class="settings-label">Font size</label>
+            <select id="fontSizeSelect" onchange="applyFontSize()">
+                <option value="small">Small</option>
+                <option value="medium" selected>Medium</option>
+                <option value="large">Large</option>
+            </select>
+            <hr class="settings-divider">
+            <label class="settings-label">Advanced</label>
+            <button class="btn-secondary" onclick="exportJSON()">⬇ Export raw data (JSON)</button>
+            <div class="dialog-actions">
+                <button type="button" class="btn-secondary" onclick="closeSettingsDialog()">Close</button>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- App update checker -->
+    <dialog id="updateDialog">
+        <div class="dialog-form">
+            <h3>App Updates</h3>
+            <p id="updateStatus" class="dialog-copy">Checking for the latest release…</p>
+            <div id="updateDetails" class="update-details" style="display:none;"></div>
+            <div class="dialog-actions">
+                <button id="openReleaseBtn" type="button" onclick="openLatestRelease()" style="display:none;">Open Release</button>
+                <button type="button" class="btn-secondary" onclick="closeUpdateDialog()">Close</button>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Image crop/resize dialog -->
+    <dialog id="imageCropDialog" class="crop-dialog" oncancel="event.preventDefault(); closeImageCropper()">
+        <div class="dialog-form crop-dialog-body">
+            <h3>Crop Photo</h3>
+            <p class="dialog-copy">Drag the image to reposition it. Use zoom to resize. The highlighted box/circle shows what will appear in the family tree.</p>
+            <div class="crop-canvas-wrap">
+                <canvas id="cropCanvas" width="320" height="320" onpointerdown="onCropPointerDown(event)" onpointermove="onCropPointerMove(event)" onpointerup="onCropPointerUp(event)" onpointercancel="onCropPointerUp(event)"></canvas>
+            </div>
+            <label class="settings-label" for="cropZoom">Zoom</label>
+            <input id="cropZoom" type="range" min="100" max="300" value="100" oninput="onCropZoomChange()">
+            <div class="dialog-actions">
+                <button type="button" class="btn-secondary" onclick="closeImageCropper()">Cancel</button>
+                <button type="button" onclick="applyImageCrop()">Use Cropped Photo</button>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Photo upload dialog (used when adding a new person's photo isn't via sidebar) -->
+    <dialog id="photoDialog">
+        <form method="dialog" class="dialog-form" onsubmit="event.preventDefault(); submitPhoto();">
+            <h3>Update Photo for <span id="photoDialogName"></span></h3>
+            <div class="dialog-preview">
+                <img id="photoDialogPreview" src="" alt="preview">
+            </div>
+            <input type="file" id="photoDialogInput" accept="image/*" onchange="previewPhoto()">
+            <div class="dialog-actions">
+                <button type="button" class="btn-secondary" onclick="closePhotoDialog()">Cancel</button>
+                <button type="submit">Upload</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- AWS S3 integration dialog -->
+    <dialog id="s3Dialog">
+        <div class="dialog-form">
+            <h3>Connect to AWS S3</h3>
+            <p class="dialog-copy">Uses your local AWS credentials (environment variables, <code>~/.aws/credentials</code> profile, or an instance role) to list and choose a bucket for photo storage.</p>
+            <button class="btn-secondary" onclick="browseS3Buckets()">🔍 Browse Buckets</button>
+            <div id="s3Error" class="dialog-error" style="display:none;"></div>
+            <ul id="s3BucketList" class="bucket-list"></ul>
+            <div class="dialog-actions">
+                <button type="button" class="btn-secondary" onclick="closeS3Dialog()">Close</button>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Google Drive integration dialog -->
+    <dialog id="driveDialog">
+        <div class="dialog-form">
+            <h3>Connect to Google Drive</h3>
+            <p class="dialog-copy">Sign in with Google to store uploaded photos in your Drive.</p>
+            <p id="driveStatus" class="dialog-copy" style="display:none;">✅ Already connected.</p>
+            <button class="btn-google" onclick="connectGoogleDrive()">🔗 Connect with Google</button>
+            <div id="driveError" class="dialog-error" style="display:none;"></div>
+            <div class="dialog-actions">
+                <button type="button" class="btn-secondary" onclick="closeDriveDialog()">Close</button>
+            </div>
+        </div>
+    </dialog>
+
+    <div id="toast" class="toast"></div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
