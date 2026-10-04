@@ -1,0 +1,56 @@
+# Family Tree Builder — run it locally with Docker or Podman.
+#
+#   docker compose up --build     # app on http://localhost:8099
+#   docker compose up dev         # same app + hot reload (web/*.js, *.css, *.go)
+#   docker compose down           # stop
+#
+# Only one service can own port 8099, so start either the default service or
+# `dev`, not both. Both work with `podman compose` as well.
+
+services:
+  familytree:
+    build:
+      context: .
+      target: runtime
+    image: familytree:local
+    container_name: familytree
+    ports:
+      - "${PORT:-8099}:8099"
+    volumes:
+      # familytree.db and uploads/ live here on the host
+      - ./data:/data
+    environment:
+      # Optional — see README "Configuration" and .env.example
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
+      AWS_BUCKET_NAME: "${AWS_BUCKET_NAME:-}"
+      AWS_REGION: "${AWS_REGION:-}"
+      FAMILYTREE_RELEASE_REPOSITORY: "${FAMILYTREE_RELEASE_REPOSITORY:-}"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8099/api/persons"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # Dev server: mounts the repository and rebuilds on change (see .air.toml).
+  # Its database and uploads are written to the repo root, exactly like
+  # `go run .` — both are gitignored.
+  dev:
+    profiles: ["dev"]
+    build:
+      context: .
+      target: dev
+    image: familytree:dev
+    container_name: familytree-dev
+    ports:
+      - "${PORT:-8099}:8099"
+    volumes:
+      - .:/src
+    environment:
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
+      AWS_BUCKET_NAME: "${AWS_BUCKET_NAME:-}"
+      AWS_REGION: "${AWS_REGION:-}"
+      FAMILYTREE_RELEASE_REPOSITORY: "${FAMILYTREE_RELEASE_REPOSITORY:-}"

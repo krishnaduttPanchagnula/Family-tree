@@ -1,0 +1,13 @@
+# Runtime data
+/data/*
+!/data/.gitkeep
+familytree.db
+familytree.db-*
+uploads/
+
+# Dev-server artifacts (docker compose up dev / air)
+tmp/
+build_errors.log
+
+# Local configuration (copy .env.example to .env)
+.env

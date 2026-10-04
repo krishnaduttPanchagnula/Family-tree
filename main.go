@@ -32,6 +32,14 @@ import (
 //go:embed web/index.html web/style.css web/app.js
 var webFS embed.FS
 var Port = "8099"
+
+// defaultRepository is where releases are published, so the in-app update
+// checker works out of the box (go run, Docker, dev builds). Release builds
+// overwrite `repository` via GoReleaser ldflags, and the
+// FAMILYTREE_RELEASE_REPOSITORY environment variable overrides both — useful
+// for pointing a fork at its own repository.
+const defaultRepository = "krishnaduttPanchagnula/Family-tree"
+
 var (
 	db               *sql.DB
 	oauthCfg         *oauth2.Config
@@ -95,6 +103,12 @@ func main() {
 	http.HandleFunc("/api/relationships", handleRelationships)
 	http.HandleFunc("/api/relationships/", handleRelationshipByID) // /api/relationships/{id}
 
+	// Data safety: download a full backup, replace all data from a backup, and
+	// re-insert rows that a delete just removed (powers the in-app Undo).
+	http.HandleFunc("/api/backup", handleBackup)
+	http.HandleFunc("/api/restore", handleRestore)
+	http.HandleFunc("/api/undo", handleUndo)
+
 	// AWS S3 integration
 	http.HandleFunc("/api/s3/buckets", handleS3Buckets)
 	http.HandleFunc("/api/s3/select-bucket", handleS3SelectBucket)
@@ -110,7 +124,11 @@ func main() {
 
 func initDB() {
 	var err error
-	db, err = sql.Open("sqlite3", "./familytree.db")
+	// _fk=1 enables foreign key enforcement on every pooled connection.
+	// (A plain "PRAGMA foreign_keys = ON" only affects the single connection
+	// it runs on, so with database/sql's pool most inserts would silently
+	// skip FK checks.)
+	db, err = sql.Open("sqlite3", "./familytree.db?_fk=1")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -139,7 +157,14 @@ func initDB() {
 	if _, err := db.Exec(createTables); err != nil {
 		log.Fatal("Failed to init database:", err)
 	}
-	db.Exec("PRAGMA foreign_keys = ON;")
+
+	// Older builds could write relationships pointing at people that don't
+	// exist (FK checks were effectively off, and a quick-add bug sent
+	// person2_id = 0). Sweep those orphans so they can't break rendering.
+	db.Exec(`DELETE FROM relationships
+		WHERE person1_id IS NULL OR person2_id IS NULL
+		   OR person1_id NOT IN (SELECT id FROM persons)
+		   OR person2_id NOT IN (SELECT id FROM persons)`)
 
 	// Migrate older databases created before these columns existed.
 	migrateAddColumn("persons", "pos_x", "REAL DEFAULT 0")
@@ -318,7 +343,8 @@ func handleUpdateCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	repo := normalizeRepository(firstNonEmpty(os.Getenv("FAMILYTREE_RELEASE_REPOSITORY"), repository))
+	repo := normalizeRepository(firstNonEmpty(
+		os.Getenv("FAMILYTREE_RELEASE_REPOSITORY"), repository, defaultRepository))
 	if repo == "" || !strings.Contains(repo, "/") {
 		http.Error(w, "release repository is not configured; set FAMILYTREE_RELEASE_REPOSITORY to owner/repo", http.StatusBadRequest)
 		return
@@ -466,20 +492,10 @@ func handleSettings(w http.ResponseWriter, r *http.Request) {
 
 func handlePersons(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
-		rows, err := db.Query(`SELECT id, name, COALESCE(image_url, ''), COALESCE(pos_x, 0), COALESCE(pos_y, 0),
-			COALESCE(dob, ''), COALESCE(dod, ''), COALESCE(birth_country, ''), COALESCE(profession, ''), COALESCE(facts, '')
-			FROM persons`)
+		persons, err := fetchAllPersons()
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
-		}
-		defer rows.Close()
-
-		persons := []Person{}
-		for rows.Next() {
-			var p Person
-			rows.Scan(&p.ID, &p.Name, &p.ImageURL, &p.PosX, &p.PosY, &p.DOB, &p.DOD, &p.BirthCountry, &p.Profession, &p.Facts)
-			persons = append(persons, p)
 		}
 		json.NewEncoder(w).Encode(persons)
 
@@ -640,13 +656,10 @@ func handlePersonByID(w http.ResponseWriter, r *http.Request) {
 
 	// /api/persons/{id}
 	if len(parts) == 1 && r.Method == "DELETE" {
-		// Best-effort local file cleanup before removing the DB row.
-		var imageURL string
-		db.QueryRow("SELECT COALESCE(image_url, '') FROM persons WHERE id = ?", id).Scan(&imageURL)
-		if strings.HasPrefix(imageURL, "/uploads/") {
-			os.Remove(filepath.Join(".", imageURL))
-		}
-
+		// The photo file on disk is intentionally left in place: deleting a
+		// person is undoable, and restoring them must not bring back a broken
+		// image link. Orphaned files are harmless and can be garbage collected
+		// by a future maintenance pass.
 		if _, err := db.Exec("DELETE FROM relationships WHERE person1_id = ? OR person2_id = ?", id, id); err != nil {
 			http.Error(w, err.Error(), 500)
 			return
@@ -665,24 +678,23 @@ func handlePersonByID(w http.ResponseWriter, r *http.Request) {
 func handleRelationships(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "GET":
-		rows, err := db.Query("SELECT id, person1_id, person2_id, relation FROM relationships")
+		rels, err := fetchAllRelationships()
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
-		}
-		defer rows.Close()
-
-		rels := []Relationship{}
-		for rows.Next() {
-			var rel Relationship
-			rows.Scan(&rel.ID, &rel.Person1ID, &rel.Person2ID, &rel.Relation)
-			rels = append(rels, rel)
 		}
 		json.NewEncoder(w).Encode(rels)
 
 	case "POST":
 		var rel Relationship
-		json.NewDecoder(r.Body).Decode(&rel)
+		if err := json.NewDecoder(r.Body).Decode(&rel); err != nil {
+			http.Error(w, "invalid JSON: "+err.Error(), 400)
+			return
+		}
+		if err := validateRelationship(&rel); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
 		res, err := db.Exec("INSERT INTO relationships (person1_id, person2_id, relation) VALUES (?, ?, ?)",
 			rel.Person1ID, rel.Person2ID, rel.Relation)
 		if err != nil {
@@ -693,6 +705,30 @@ func handleRelationships(w http.ResponseWriter, r *http.Request) {
 		rel.ID = int(id)
 		json.NewEncoder(w).Encode(rel)
 	}
+}
+
+// validateRelationship rejects relationship payloads that reference missing
+// or identical people before they reach the database.
+func validateRelationship(rel *Relationship) error {
+	if rel.Person1ID <= 0 || rel.Person2ID <= 0 {
+		return fmt.Errorf("person1_id and person2_id are required")
+	}
+	if rel.Person1ID == rel.Person2ID {
+		return fmt.Errorf("a person cannot be linked to themselves")
+	}
+	if strings.TrimSpace(rel.Relation) == "" {
+		return fmt.Errorf("relation is required")
+	}
+	for _, id := range []int{rel.Person1ID, rel.Person2ID} {
+		var n int
+		if err := db.QueryRow("SELECT COUNT(*) FROM persons WHERE id = ?", id).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("person %d does not exist", id)
+		}
+	}
+	return nil
 }
 
 // handleRelationshipByID handles DELETE /api/relationships/{id}
@@ -712,6 +748,216 @@ func handleRelationshipByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// --- Backup / restore / undo ---
+//
+// backupPayload is the shape used by all three endpoints, so the frontend can
+// serialize the same object for a download, a full restore, and an undo of a
+// delete.
+type backupPayload struct {
+	Version       int            `json:"version"`
+	ExportedAt    string         `json:"exported_at"`
+	Persons       []Person       `json:"persons"`
+	Relationships []Relationship `json:"relationships"`
+}
+
+func fetchAllPersons() ([]Person, error) {
+	rows, err := db.Query(`SELECT id, name, COALESCE(image_url, ''), COALESCE(pos_x, 0), COALESCE(pos_y, 0),
+		COALESCE(dob, ''), COALESCE(dod, ''), COALESCE(birth_country, ''), COALESCE(profession, ''), COALESCE(facts, '')
+		FROM persons ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	persons := []Person{}
+	for rows.Next() {
+		var p Person
+		if err := rows.Scan(&p.ID, &p.Name, &p.ImageURL, &p.PosX, &p.PosY, &p.DOB, &p.DOD, &p.BirthCountry, &p.Profession, &p.Facts); err != nil {
+			return nil, err
+		}
+		persons = append(persons, p)
+	}
+	return persons, rows.Err()
+}
+
+func fetchAllRelationships() ([]Relationship, error) {
+	rows, err := db.Query("SELECT id, person1_id, person2_id, relation FROM relationships ORDER BY id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	rels := []Relationship{}
+	for rows.Next() {
+		var rel Relationship
+		if err := rows.Scan(&rel.ID, &rel.Person1ID, &rel.Person2ID, &rel.Relation); err != nil {
+			return nil, err
+		}
+		rels = append(rels, rel)
+	}
+	return rels, rows.Err()
+}
+
+func decodePayload(r *http.Request) (backupPayload, error) {
+	var payload backupPayload
+	if err := json.NewDecoder(io.LimitReader(r.Body, 64<<20)).Decode(&payload); err != nil {
+		return payload, fmt.Errorf("invalid JSON payload: %w", err)
+	}
+	return payload, nil
+}
+
+// writePayload persists persons and relationships. With wipe=true the existing
+// tables are emptied first (full restore); with wipe=false the rows are merged
+// in on top of the current data (undo of a delete). Relationship rows that
+// point at a person who is neither in the payload nor already stored are
+// dropped so a bad backup can never leave dangling references.
+func writePayload(payload backupPayload, wipe bool) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if wipe {
+		if _, err := tx.Exec("DELETE FROM relationships"); err != nil {
+			return err
+		}
+		if _, err := tx.Exec("DELETE FROM persons"); err != nil {
+			return err
+		}
+	}
+
+	known := map[int]bool{}
+	if rows, err := tx.Query("SELECT id FROM persons"); err == nil {
+		for rows.Next() {
+			var id int
+			rows.Scan(&id)
+			known[id] = true
+		}
+		rows.Close()
+	}
+
+	for _, p := range payload.Persons {
+		if p.ID > 0 {
+			known[p.ID] = true
+			if _, err := tx.Exec(`INSERT INTO persons (id, name, image_url, pos_x, pos_y, dob, dod, birth_country, profession, facts)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				ON CONFLICT(id) DO UPDATE SET
+					name = excluded.name, image_url = excluded.image_url, pos_x = excluded.pos_x, pos_y = excluded.pos_y,
+					dob = excluded.dob, dod = excluded.dod, birth_country = excluded.birth_country,
+					profession = excluded.profession, facts = excluded.facts`,
+				p.ID, p.Name, p.ImageURL, p.PosX, p.PosY, p.DOB, p.DOD, p.BirthCountry, p.Profession, p.Facts); err != nil {
+				return fmt.Errorf("could not save %q: %w", p.Name, err)
+			}
+			continue
+		}
+		if _, err := tx.Exec(`INSERT INTO persons (name, image_url, pos_x, pos_y, dob, dod, birth_country, profession, facts)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			p.Name, p.ImageURL, p.PosX, p.PosY, p.DOB, p.DOD, p.BirthCountry, p.Profession, p.Facts); err != nil {
+			return fmt.Errorf("could not save %q: %w", p.Name, err)
+		}
+	}
+
+	for _, rel := range payload.Relationships {
+		if !known[rel.Person1ID] || !known[rel.Person2ID] {
+			continue
+		}
+		if rel.ID > 0 {
+			if _, err := tx.Exec(`INSERT INTO relationships (id, person1_id, person2_id, relation)
+				VALUES (?, ?, ?, ?)
+				ON CONFLICT(id) DO UPDATE SET person1_id = excluded.person1_id, person2_id = excluded.person2_id, relation = excluded.relation`,
+				rel.ID, rel.Person1ID, rel.Person2ID, rel.Relation); err != nil {
+				return fmt.Errorf("could not save a relationship: %w", err)
+			}
+			continue
+		}
+		if _, err := tx.Exec("INSERT INTO relationships (person1_id, person2_id, relation) VALUES (?, ?, ?)",
+			rel.Person1ID, rel.Person2ID, rel.Relation); err != nil {
+			return fmt.Errorf("could not save a relationship: %w", err)
+		}
+	}
+
+	// Keep AUTOINCREMENT ahead of the highest explicit id we just wrote, so a
+	// later insert never collides with a restored row.
+	tx.Exec("DELETE FROM sqlite_sequence WHERE name IN ('persons', 'relationships')")
+	tx.Exec(`INSERT INTO sqlite_sequence (name, seq) SELECT 'persons', COALESCE(MAX(id), 0) FROM persons`)
+	tx.Exec(`INSERT INTO sqlite_sequence (name, seq) SELECT 'relationships', COALESCE(MAX(id), 0) FROM relationships`)
+
+	return tx.Commit()
+}
+
+// handleBackup downloads the whole tree as a single JSON document.
+func handleBackup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	persons, err := fetchAllPersons()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	rels, err := fetchAllRelationships()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="family-tree-backup-%s.json"`, time.Now().Format("2006-01-02")))
+	json.NewEncoder(w).Encode(backupPayload{
+		Version:       1,
+		ExportedAt:    time.Now().UTC().Format(time.RFC3339),
+		Persons:       persons,
+		Relationships: rels,
+	})
+}
+
+// handleRestore replaces every person and relationship with the uploaded
+// backup. The client asks for confirmation first and can undo the restore for
+// the length of the session via /api/undo.
+func handleRestore(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	payload, err := decodePayload(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if payload.Persons == nil {
+		http.Error(w, "backup has no persons list", http.StatusBadRequest)
+		return
+	}
+	if err := writePayload(payload, true); err != nil {
+		http.Error(w, "restore failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]int{"persons": len(payload.Persons), "relationships": len(payload.Relationships)})
+}
+
+// handleUndo re-inserts rows that a delete removed (person + their
+// relationships, or a single relationship). It merges instead of wiping, so it
+// is never destructive on its own.
+func handleUndo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	payload, err := decodePayload(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := writePayload(payload, false); err != nil {
+		http.Error(w, "undo failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]int{"persons": len(payload.Persons), "relationships": len(payload.Relationships)})
 }
 
 // --- Google Auth ---

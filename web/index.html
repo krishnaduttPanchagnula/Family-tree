@@ -10,16 +10,33 @@
 </head>
 <body>
 
-    <!-- Top header bar -->
+    <!-- Top header: brand, search, undo -->
     <header class="app-header">
         <div class="brand">
             <span class="brand-logo">🌳</span>
-            <span class="brand-name">FAMILY TREE BUILDER</span>
+            <span class="brand-name">Family Tree Builder</span>
         </div>
-        <div class="storage-pills">
-            <button id="pillLocal" class="pill active" onclick="selectStorage('local')">Local Disk</button>
-            <button id="pillS3" class="pill" onclick="selectStorage('s3')">AWS S3</button>
-            <button id="pillDrive" class="pill" onclick="selectStorage('drive')">Google Drive</button>
+
+        <div class="search-box" role="search">
+            <span class="search-icon" aria-hidden="true">⌕</span>
+            <input type="search" id="searchInput" placeholder="Search people, places, professions…"
+                   autocomplete="off" spellcheck="false"
+                   aria-label="Search people" aria-expanded="false" aria-controls="searchResults">
+            <kbd class="search-kbd" aria-hidden="true">/</kbd>
+            <div id="searchResults" class="search-results" role="listbox" aria-label="Search results" hidden></div>
+        </div>
+
+        <div class="header-actions">
+            <button id="undoBtn" class="header-btn" onclick="performUndo()" disabled
+                    title="Undo the last delete or layout change (Ctrl+Z)">
+                <span aria-hidden="true">↶</span><span class="header-btn-label">Undo</span>
+                <span id="undoCount" class="badge" hidden>0</span>
+            </button>
+            <button id="storageChip" class="header-btn storage-chip" onclick="openSettingsDialog()"
+                    title="Photo storage and app settings">
+                <span class="chip-dot" aria-hidden="true"></span>
+                <span id="storageChipLabel">Local disk</span>
+            </button>
         </div>
     </header>
 
@@ -27,67 +44,102 @@
     <div class="app-body">
 
         <!-- Left sidebar: selected person's details & tree actions -->
-        <aside id="sidebar" class="sidebar">
-            <button id="sidebarCollapseBtn" class="sidebar-collapse-btn" onclick="toggleSidebar()" title="Collapse panel">‹</button>
+        <aside id="sidebar" class="sidebar" aria-label="Person details">
+            <div class="sidebar-topbar">
+                <button id="sidebarCollapseBtn" class="sidebar-collapse-btn" onclick="toggleSidebar()" title="Collapse panel">‹ Hide panel</button>
+            </div>
 
             <!-- Shown when nothing is selected yet -->
             <div id="sidebarEmpty" class="sidebar-empty">
-                <p>Select a person on the tree to view or edit their details.</p>
-                <p class="hint">Or start your tree from scratch:</p>
-                <button onclick="openQuickAdd(null, 'root')">+ Add Person</button>
+                <div class="sidebar-empty-art" aria-hidden="true">🌳</div>
+                <p class="sidebar-empty-title">No one selected</p>
+                <p class="hint">Click a card on the tree to view and edit that person.</p>
+                <button class="btn-primary" onclick="openQuickAdd(null, 'root')">+ Add a person</button>
+                <p class="hint hint-spaced">New here? The getting-started checklist in the corner walks you through it.</p>
             </div>
 
             <!-- Shown when a person is selected -->
             <div id="sidebarContent" class="sidebar-content" style="display:none;">
-                <div class="sidebar-tabs">
-                    <button class="tab-btn active" data-tab="personal" onclick="switchTab('personal')">Personal</button>
-                    <button class="tab-btn" data-tab="biography" onclick="switchTab('biography')">Biography</button>
-                    <button class="tab-btn" data-tab="image" onclick="switchTab('image')">Image</button>
+                <div class="person-header">
+                    <img id="sidebarAvatar" class="person-avatar" src="" alt="">
+                    <div class="person-ident">
+                        <div id="sidebarPersonName" class="person-name"></div>
+                        <div id="sidebarPersonDates" class="person-dates"></div>
+                        <span id="sidebarPersonRole" class="person-role" hidden></span>
+                    </div>
+                    <button class="ghost-icon-btn" onclick="clearSelection()" title="Deselect this person (Esc)">×</button>
+                </div>
+
+                <nav id="lineageCrumbs" class="lineage-crumbs" aria-label="Path to earliest ancestor"></nav>
+
+                <div class="sidebar-tabs" role="tablist">
+                    <button class="tab-btn active" data-tab="personal" role="tab" onclick="switchTab('personal')">Personal</button>
+                    <button class="tab-btn" data-tab="biography" role="tab" onclick="switchTab('biography')">Bio</button>
+                    <button class="tab-btn" data-tab="image" role="tab" onclick="switchTab('image')">Photo</button>
+                    <button class="tab-btn" data-tab="relations" role="tab" onclick="switchTab('relations')">Family</button>
                 </div>
 
                 <div class="tab-panel" data-panel="personal">
-                    <label class="field-label">Name</label>
-                    <input type="text" id="fieldName">
+                    <label class="field-label" for="fieldName">Name</label>
+                    <input type="text" id="fieldName" autocomplete="off">
 
-                    <label class="field-label">Date of birth</label>
-                    <input type="date" id="fieldDob">
+                    <div class="field-row">
+                        <div class="field-col">
+                            <label class="field-label" for="fieldDob">Date of birth</label>
+                            <input type="date" id="fieldDob">
+                        </div>
+                        <div class="field-col">
+                            <label class="field-label" for="fieldDod">Date of death</label>
+                            <input type="date" id="fieldDod">
+                        </div>
+                    </div>
 
-                    <label class="field-label">Date of death</label>
-                    <input type="date" id="fieldDod">
+                    <label class="field-label" for="fieldBirthCountry">Place of birth</label>
+                    <input type="text" id="fieldBirthCountry" placeholder="e.g. Dublin, Ireland" autocomplete="off">
 
-                    <label class="field-label">Place of birth</label>
-                    <input type="text" id="fieldBirthCountry" placeholder="e.g. Dublin, Ireland">
-
-                    <label class="field-label">Profession</label>
-                    <input type="text" id="fieldProfession" placeholder="e.g. Teacher">
+                    <label class="field-label" for="fieldProfession">Profession</label>
+                    <input type="text" id="fieldProfession" placeholder="e.g. Teacher" autocomplete="off">
                 </div>
 
                 <div class="tab-panel" data-panel="biography" style="display:none;">
-                    <label class="field-label">Interesting facts</label>
-                    <textarea id="fieldFacts" rows="10" placeholder="Meet my mother! Edit her info and expand family connections via left menu."></textarea>
+                    <label class="field-label" for="fieldFacts">Interesting facts</label>
+                    <textarea id="fieldFacts" rows="12" placeholder="Stories, nicknames, where they lived, what they were known for…"></textarea>
                 </div>
 
                 <div class="tab-panel" data-panel="image" style="display:none;">
                     <div class="sidebar-photo-preview">
-                        <img id="sidebarPhotoPreview" src="" alt="preview">
+                        <img id="sidebarPhotoPreview" src="" alt="Current photo">
                     </div>
-                    <input type="file" id="sidebarPhotoInput" accept="image/*" onchange="handlePhotoFileChosen(this, 'sidebar')">
+                    <p class="hint">Choose a photo and adjust the crop before it is saved.</p>
+                    <label class="file-label">
+                        <span class="file-label-btn">Choose photo…</span>
+                        <input type="file" id="sidebarPhotoInput" accept="image/*" onchange="handlePhotoFileChosen(this, 'sidebar')">
+                    </label>
                 </div>
 
-                <div class="sidebar-actions">
-                    <button onclick="saveSelectedPerson()">💾 Save Person</button>
+                <div class="tab-panel" data-panel="relations" style="display:none;">
+                    <div class="panel-section-title">Add a relative</div>
+                    <div class="add-grid">
+                        <button class="btn-outline" onclick="openQuickAdd(null, 'parent')">👪 Parent</button>
+                        <button class="btn-outline" onclick="openQuickAdd(null, 'spouse')">💑 Partner</button>
+                        <button class="btn-outline" onclick="openQuickAdd(null, 'sibling')">👬 Sibling</button>
+                        <button class="btn-outline" onclick="openQuickAdd(null, 'child')">🙂 Child</button>
+                    </div>
 
-                    <div class="sidebar-divider"></div>
+                    <div class="panel-section-title">Connections</div>
+                    <div id="connectionsList" class="connections-list"></div>
 
-                    <button class="btn-outline" onclick="openQuickAdd(null, 'parent')">👪 Add Parents</button>
-                    <button class="btn-outline" onclick="openQuickAdd(null, 'sibling')">👬 Add Sibling</button>
-                    <button class="btn-outline" onclick="openQuickAdd(null, 'spouse')">💑 Add Partner</button>
-                    <button class="btn-outline" onclick="openQuickAdd(null, 'child')">🙂 Add Child</button>
-
-                    <div class="sidebar-divider"></div>
-
-                    <button class="btn-danger-outline" onclick="deleteSelectedPerson()">🚫 Delete Person</button>
+                    <button class="btn-outline full" onclick="startConnectFromSidebar()">⇄ Link two existing people</button>
                 </div>
+            </div>
+
+            <!-- Sticky footer: save state + destructive action -->
+            <div id="sidebarFooter" class="sidebar-footer" style="display:none;">
+                <div class="sidebar-footer-row">
+                    <span id="dirtyIndicator" class="dirty-indicator" hidden>● Unsaved changes</span>
+                    <button id="savePersonBtn" class="btn-save" onclick="saveSelectedPerson()">Save changes</button>
+                </div>
+                <button class="btn-ghost-danger" onclick="deleteSelectedPerson()">Delete person</button>
             </div>
         </aside>
 
@@ -99,55 +151,106 @@
                     <svg id="treeLines" class="tree-lines"></svg>
                     <div id="treeNodes" class="tree-nodes"></div>
                 </div>
-                <div id="canvasEmpty" class="empty-state" style="display:none;">No one on the tree yet. Add your first family member from the left panel.</div>
-            </div>
-
-            <!-- Floating toolbar, top-right of the canvas -->
-            <div class="floating-toolbar">
-                <button class="icon-btn" title="Zoom out" onclick="adjustZoom(-0.1)">🔍−</button>
-                <button class="icon-btn" title="Zoom in" onclick="adjustZoom(0.1)">🔍+</button>
-                <button class="icon-btn labeled" title="Recenter the current tree in view" onclick="centerTree()">◎ Recenter</button>
-                <button class="icon-btn labeled" title="Arrange people into parent-to-child generations" onclick="resetTreeLayout()">↧ Tree Layout</button>
-                <button class="icon-btn labeled" title="Check for app updates" onclick="checkForUpdates()">⬆ Update</button>
-                <button id="legendBtn" class="icon-btn labeled" title="Show relationship color legend" onclick="toggleLegend()">◐ Legend</button>
-                <label class="theme-picker" title="Change color theme">
-                    <span>Theme</span>
-                    <select id="themeSelect" onchange="applyTheme(this.value)">
-                        <option value="white">White</option>
-                        <option value="black">Black</option>
-                        <option value="tokyo">Tokyo Night</option>
-                        <option value="sand">Sand</option>
-                        <option value="milan">Milan</option>
-                    </select>
-                </label>
-                <button class="icon-btn" title="Tree settings" onclick="openSettingsDialog()">⚙</button>
-                <button id="connectBtn" class="icon-btn labeled" title="Manually connect two existing people" onclick="toggleConnectMode()">⇄ Edit Connections</button>
-                <div class="dropdown">
-                    <button class="icon-btn labeled" onclick="toggleExportMenu()">⬇ Export ▾</button>
-                    <div id="exportMenu" class="dropdown-menu">
-                        <button onclick="exportImage('jpeg')">JPEG</button>
-                        <button onclick="exportImage('png')">PNG</button>
-                        <button onclick="exportImage('svg')">SVG</button>
+                <div id="canvasEmpty" class="empty-state" style="display:none;">
+                    <div class="empty-card">
+                        <div class="empty-art" aria-hidden="true">🌳</div>
+                        <h2>Start your family tree</h2>
+                        <p>Add yourself first, then grow the tree one relation at a time — parents, a partner, children.</p>
+                        <div class="empty-actions">
+                            <button class="btn-primary" onclick="openQuickAdd(null, 'root')">+ Add yourself</button>
+                            <button class="btn-secondary" onclick="openRestorePicker()">↩ Restore a backup</button>
+                        </div>
+                        <p class="empty-tip">Tip: press <kbd>/</kbd> to search, <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo.</p>
                     </div>
                 </div>
-                <button class="icon-btn" title="Refresh tree" onclick="loadTree()">⟳</button>
+            </div>
+
+            <!-- Floating toolbar, top-right of the canvas, grouped by purpose -->
+            <div class="floating-toolbar" role="toolbar" aria-label="Tree tools">
+                <div class="tool-group">
+                    <button class="icon-btn" title="Zoom out" aria-label="Zoom out" onclick="adjustZoom(-0.1)">−</button>
+                    <span id="zoomLabel" class="zoom-label" title="Zoom level — hold Ctrl and scroll to zoom">100%</span>
+                    <button class="icon-btn" title="Zoom in" aria-label="Zoom in" onclick="adjustZoom(0.1)">+</button>
+                    <button class="icon-btn labeled" title="Fit the whole tree in view" onclick="centerTree()">⛶ Fit</button>
+                </div>
+
+                <div class="tool-sep" aria-hidden="true"></div>
+
+                <div class="tool-group">
+                    <button class="icon-btn labeled" title="Arrange everyone into parent-to-child generations" onclick="resetTreeLayout()">↧ Auto-layout</button>
+                    <button class="icon-btn labeled" title="Centre the view on the selected person" onclick="focusSelected()">◎ Centre</button>
+                </div>
+
+                <div class="tool-sep" aria-hidden="true"></div>
+
+                <div class="tool-group">
+                    <button id="connectBtn" class="icon-btn labeled" title="Link or unlink two existing people" onclick="toggleConnectMode()">⇄ Link</button>
+                    <button id="legendBtn" class="icon-btn labeled" title="Show the relationship colour legend" onclick="toggleLegend()">◐ Legend</button>
+                </div>
+
+                <div class="tool-sep" aria-hidden="true"></div>
+
+                <div class="tool-group">
+                    <div class="dropdown">
+                        <button class="icon-btn labeled" onclick="toggleExportMenu()" aria-haspopup="menu">⬇ Export ▾</button>
+                        <div id="exportMenu" class="dropdown-menu">
+                            <button onclick="exportImage('jpeg')">JPEG image</button>
+                            <button onclick="exportImage('png')">PNG image</button>
+                            <button onclick="exportImage('svg')">SVG image</button>
+                            <div class="dropdown-sep"></div>
+                            <button onclick="exportJSON()">Raw data (JSON)</button>
+                        </div>
+                    </div>
+                    <button class="icon-btn" title="Reload the tree" aria-label="Reload the tree" onclick="loadTree()">⟳</button>
+                    <button class="icon-btn" title="Settings" aria-label="Settings" onclick="openSettingsDialog()">⚙</button>
+                </div>
             </div>
 
             <div id="legendPanel" class="legend-panel" style="display:none;">
                 <div class="legend-title">Relationship Legend</div>
-                <div class="legend-item"><span class="legend-swatch root"></span><span>Root / default person</span></div>
+                <div class="legend-item"><span class="legend-swatch root"></span><span>Root / no links yet</span></div>
                 <div class="legend-item"><span class="legend-swatch spouse"></span><span>Partner / spouse</span></div>
+                <div class="legend-item"><span class="legend-swatch spouse divorced"></span><span>Ex-partner / separated</span></div>
                 <div class="legend-item"><span class="legend-swatch parent"></span><span>Parent → child</span></div>
+                <div class="legend-item"><span class="legend-swatch parent adoptive"></span><span>Adoptive parent → child</span></div>
+                <div class="legend-item"><span class="legend-swatch parent foster"></span><span>Foster parent → child</span></div>
+                <div class="legend-item"><span class="legend-swatch parent guardian"></span><span>Guardian → child</span></div>
+                <div class="legend-item"><span class="legend-swatch parent unknown"></span><span>Unknown parent → child</span></div>
                 <div class="legend-item"><span class="legend-swatch sibling full"></span><span>Full sibling</span></div>
                 <div class="legend-item"><span class="legend-swatch sibling half"></span><span>Half sibling</span></div>
                 <div class="legend-item"><span class="legend-swatch sibling step"></span><span>Step sibling</span></div>
             </div>
 
-            <div id="connectHint" class="connect-hint" style="display:none;">Edit Connections: click a person, then click a second person to link them. Click an existing line to remove it. <button class="link-btn" onclick="toggleConnectMode()">Done</button></div>
+            <div id="connectHint" class="connect-hint" style="display:none;">
+                <span>Click a person, then a second person to link them. Click an existing line to remove it. <kbd>Esc</kbd> exits.</span>
+                <button class="link-btn" onclick="toggleConnectMode()">Done</button>
+            </div>
+
+            <!-- First-run / getting-started checklist -->
+            <div id="checklistPanel" class="checklist-panel" style="display:none;">
+                <div class="checklist-head">
+                    <span class="checklist-title">Getting started</span>
+                    <span id="checklistProgress" class="checklist-progress">0 / 6</span>
+                    <button class="checklist-close" onclick="dismissChecklist()" title="Hide the checklist">×</button>
+                </div>
+                <ul id="checklistItems" class="checklist-items"></ul>
+            </div>
 
             <button id="sidebarExpandBtn" class="sidebar-expand-btn" onclick="toggleSidebar()" title="Show panel" style="display:none;">›</button>
         </main>
     </div>
+
+    <!-- Yes / no confirmation (replaces the browser confirm() box) -->
+    <dialog id="confirmDialog">
+        <div class="dialog-form">
+            <h3 id="confirmTitle">Are you sure?</h3>
+            <p id="confirmMessage" class="dialog-copy"></p>
+            <div class="dialog-actions">
+                <button type="button" class="btn-secondary" id="confirmCancelBtn">Cancel</button>
+                <button type="button" class="btn-danger" id="confirmOkBtn">Confirm</button>
+            </div>
+        </div>
+    </dialog>
 
     <!-- Quick add popover: root / parent / spouse / sibling / child -->
     <dialog id="quickAddDialog">
@@ -156,15 +259,40 @@
             <div class="dialog-preview">
                 <img id="quickAddPreview" src="" alt="preview">
             </div>
-            <input type="text" id="quickAddName" placeholder="Name" required>
-            <input type="file" id="quickAddPic" accept="image/*" onchange="previewQuickAddPhoto()">
+            <label class="field-label" for="quickAddName">Name</label>
+            <input type="text" id="quickAddName" placeholder="Full name" required autocomplete="off">
+            <label class="field-label" for="quickAddDob">Date of birth (optional)</label>
+            <input type="date" id="quickAddDob">
+            <div id="quickAddParentRow" style="display:none;">
+                <label class="field-label" for="quickAddParentType">Type of parent</label>
+                <select id="quickAddParentType">
+                    <option value="">Biological parent</option>
+                    <option value="adoptive">Adoptive parent</option>
+                    <option value="foster">Foster parent</option>
+                    <option value="guardian">Guardian</option>
+                    <option value="unknown">Unknown parent (placeholder)</option>
+                </select>
+            </div>
+            <div id="quickAddPartnerRow" style="display:none;">
+                <label class="field-label" for="quickAddPartnerType">Type of partnership</label>
+                <select id="quickAddPartnerType">
+                    <option value="">Partner / married</option>
+                    <option value="divorced">Divorced / separated</option>
+                </select>
+            </div>
             <div id="quickAddSiblingRow" style="display:none;">
+                <label class="field-label" for="quickAddSiblingType">Type of sibling</label>
                 <select id="quickAddSiblingType">
                     <option value="full">Full sibling (same parents)</option>
                     <option value="half">Half sibling (one shared parent)</option>
                     <option value="step">Step sibling (no shared parent)</option>
                 </select>
             </div>
+            <label class="field-label">Photo (optional)</label>
+            <label class="file-label">
+                <span class="file-label-btn">Choose photo…</span>
+                <input type="file" id="quickAddPic" accept="image/*" onchange="previewQuickAddPhoto()">
+            </label>
             <div class="dialog-actions">
                 <button type="button" class="btn-secondary" onclick="closeQuickAdd()">Cancel</button>
                 <button type="submit">Add</button>
@@ -172,18 +300,31 @@
         </form>
     </dialog>
 
-    <!-- Manually link two existing people (Edit Connections mode) -->
+    <!-- Manually link two existing people (Link mode) -->
     <dialog id="linkDialog">
         <form method="dialog" class="dialog-form" onsubmit="event.preventDefault(); submitLinkDialog();">
             <h3>Connect People</h3>
             <p id="linkDialogNames" class="dialog-copy"></p>
+            <label class="field-label" for="linkRelationType">Relationship</label>
             <select id="linkRelationType">
-                <option value="a-parent-of-b">First person is the parent of the second</option>
-                <option value="b-parent-of-a">Second person is the parent of the first</option>
-                <option value="spouse">They are spouses</option>
-                <option value="sibling-full">Full siblings (same parents)</option>
-                <option value="sibling-half">Half siblings (one shared parent)</option>
-                <option value="sibling-step">Step siblings (no shared parent)</option>
+                <optgroup label="Parent and child">
+                    <option value="a-parent-of-b">First person is the biological parent of the second</option>
+                    <option value="a-adoptive-parent-of-b">First person is the adoptive parent of the second</option>
+                    <option value="a-foster-parent-of-b">First person is the foster parent of the second</option>
+                    <option value="a-guardian-of-b">First person is the guardian of the second</option>
+                    <option value="a-unknown-parent-of-b">First person is an unknown parent of the second</option>
+                    <option value="b-parent-of-a">Second person is the biological parent of the first</option>
+                    <option value="b-adoptive-parent-of-a">Second person is the adoptive parent of the first</option>
+                </optgroup>
+                <optgroup label="Partners">
+                    <option value="spouse">They are partners / married</option>
+                    <option value="spouse-divorced">They are divorced / separated</option>
+                </optgroup>
+                <optgroup label="Siblings">
+                    <option value="sibling-full">Full siblings (same parents)</option>
+                    <option value="sibling-half">Half siblings (one shared parent)</option>
+                    <option value="sibling-step">Step siblings (no shared parent)</option>
+                </optgroup>
             </select>
             <div class="dialog-actions">
                 <button type="button" class="btn-secondary" onclick="closeLinkDialog()">Cancel</button>
@@ -192,25 +333,65 @@
         </form>
     </dialog>
 
-    <!-- Tree display settings -->
+    <!-- Tree settings -->
     <dialog id="settingsDialog">
-        <div class="dialog-form">
-            <h3>Tree Settings</h3>
-            <label class="settings-label">Date format</label>
-            <select id="dateFormatSelect" onchange="applyDateFormat()">
-                <option value="dmy">DD/MM/YYYY</option>
-                <option value="mdy">MM/DD/YYYY</option>
-                <option value="ymd">YYYY-MM-DD</option>
-            </select>
-            <label class="settings-label">Font size</label>
-            <select id="fontSizeSelect" onchange="applyFontSize()">
-                <option value="small">Small</option>
-                <option value="medium" selected>Medium</option>
-                <option value="large">Large</option>
-            </select>
-            <hr class="settings-divider">
-            <label class="settings-label">Advanced</label>
-            <button class="btn-secondary" onclick="exportJSON()">⬇ Export raw data (JSON)</button>
+        <div class="dialog-form settings-form">
+            <h3>Settings</h3>
+
+            <section class="settings-section">
+                <h4>Appearance</h4>
+                <label class="settings-label" for="themeSelect">Theme</label>
+                <select id="themeSelect" onchange="applyTheme(this.value)">
+                    <option value="white">White</option>
+                    <option value="black">Black</option>
+                    <option value="tokyo">Tokyo Night</option>
+                    <option value="sand">Sand</option>
+                    <option value="milan">Milan</option>
+                </select>
+                <label class="settings-label" for="fontSizeSelect">Tree text size</label>
+                <select id="fontSizeSelect" onchange="applyFontSize()">
+                    <option value="small">Small</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="large">Large</option>
+                </select>
+            </section>
+
+            <section class="settings-section">
+                <h4>Dates</h4>
+                <label class="settings-label" for="dateFormatSelect">Date format</label>
+                <select id="dateFormatSelect" onchange="applyDateFormat()">
+                    <option value="dmy">DD/MM/YYYY</option>
+                    <option value="mdy">MM/DD/YYYY</option>
+                    <option value="ymd">YYYY-MM-DD</option>
+                </select>
+            </section>
+
+            <section class="settings-section">
+                <h4>Photo storage</h4>
+                <div class="storage-pills settings-pills">
+                    <button id="pillLocal" class="pill active" onclick="selectStorage('local')">Local disk</button>
+                    <button id="pillS3" class="pill" onclick="selectStorage('s3')">AWS S3</button>
+                    <button id="pillDrive" class="pill" onclick="selectStorage('drive')">Google Drive</button>
+                </div>
+                <p class="settings-note">Photos live in <code>uploads/</code> unless you connect S3 or Google Drive.</p>
+            </section>
+
+            <section class="settings-section">
+                <h4>Backup &amp; data</h4>
+                <div class="settings-buttons">
+                    <button class="btn-secondary" onclick="downloadBackup()">⬇ Download backup</button>
+                    <button class="btn-secondary" onclick="openRestorePicker()">↩ Restore from backup…</button>
+                    <button class="btn-secondary" onclick="exportJSON()">Export raw JSON</button>
+                    <button class="btn-secondary" onclick="showChecklist()">Show getting-started list</button>
+                </div>
+                <p class="settings-note">A backup contains every person and relationship, but not the photo files — keep the <code>uploads/</code> folder next to it.</p>
+            </section>
+
+            <section class="settings-section">
+                <h4>About</h4>
+                <button class="btn-secondary" onclick="checkForUpdates()">⬆ Check for updates</button>
+            </section>
+
             <div class="dialog-actions">
                 <button type="button" class="btn-secondary" onclick="closeSettingsDialog()">Close</button>
             </div>
@@ -289,6 +470,9 @@
             </div>
         </div>
     </dialog>
+
+    <!-- Hidden picker used by "Restore from backup" -->
+    <input type="file" id="restoreFileInput" accept="application/json,.json" style="display:none;">
 
     <div id="toast" class="toast"></div>
 

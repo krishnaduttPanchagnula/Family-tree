@@ -1,0 +1,30 @@
+# Air — live reload config, used by the `dev` service in docker-compose.yml
+# (and natively if you run `air` yourself).
+#
+# The UI is embedded into the binary via go:embed, so edits to the JavaScript,
+# CSS and HTML also need a rebuild — that is why those extensions are watched.
+# Refresh the browser after a rebuild.
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -trimpath -ldflags=\"-s -w\" -o ./tmp/familytree ."
+  bin = "./tmp/familytree"
+  delay = 400
+  include_ext = ["go", "js", "css", "html"]
+  exclude_dir = [".git", ".github", "tmp", "data", "uploads"]
+  exclude_unchanged = false
+  stop_on_error = true
+  # Bind mounts (Docker Desktop, rootless Podman) do not always deliver
+  # inotify events, so poll instead — it always works.
+  poll = true
+  poll_interval = 500
+  send_interrupt = true
+  kill_delay = "500ms"
+
+[log]
+  time = true
+
+[misc]
+  clean_on_exit = true

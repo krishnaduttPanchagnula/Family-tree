@@ -1,0 +1,21 @@
+# VCS / CI / release tooling
+.git
+.github
+.goreleaser.yaml
+.gitignore
+
+# Local runtime data (never bake a developer's database into the image)
+data
+tmp
+uploads
+familytree.db
+familytree.db-*
+build_errors.log
+.env
+.env.*
+
+# Not needed to compile the binary
+tree.png
+README.md
+Dockerfile
+docker-compose.yml

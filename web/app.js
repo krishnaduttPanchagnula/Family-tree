@@ -31,6 +31,21 @@ let currentTheme = 'white';
 let quickAddCroppedPhoto = null;
 let photoDialogCroppedPhoto = null;
 let cropperState = null;
+let sidebarDirty = false;        // sidebar fields changed since the last save
+let undoStack = [];              // newest last: { label, run() }
+let searchMatches = [];          // people matching the current search query
+let searchActiveIndex = -1;      // keyboard-highlighted row in the results list
+
+const CHECKLIST_KEY = 'familytree.checklistDismissed';
+const EXPORTED_KEY = 'familytree.exported';
+const CHECKLIST_STEPS = [
+    { id: 'root', label: 'Add yourself or a first relative', action: 'Start', run: () => openQuickAdd(null, 'root') },
+    { id: 'parents', label: 'Add your parents', action: 'Add', run: () => openQuickAdd(null, 'parent') },
+    { id: 'partner', label: 'Add a partner', action: 'Add', run: () => openQuickAdd(null, 'spouse') },
+    { id: 'children', label: 'Add children', action: 'Add', run: () => openQuickAdd(null, 'child') },
+    { id: 'photo', label: 'Give someone a photo', action: 'Upload', run: () => focusPhotoTab() },
+    { id: 'export', label: 'Export or share your tree', action: 'Export', run: () => exportImage('png') }
+];
 
 const placeholderAvatar = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23ccc"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>';
 
@@ -39,6 +54,151 @@ function showToast(message, isError) {
     toast.textContent = message;
     toast.className = 'toast show' + (isError ? ' error' : '');
     setTimeout(() => { toast.className = 'toast'; }, 2500);
+}
+
+// --- Confirmation dialog (replaces browser confirm()) ---
+// Returns a Promise<boolean>. Wire-up of the buttons happens in window.onload.
+let confirmResolve = null;
+
+function showConfirm(options) {
+    const opts = options || {};
+    const dialog = document.getElementById('confirmDialog');
+    document.getElementById('confirmTitle').textContent = opts.title || 'Are you sure?';
+    document.getElementById('confirmMessage').textContent = opts.message || '';
+
+    const okBtn = document.getElementById('confirmOkBtn');
+    const cancelBtn = document.getElementById('confirmCancelBtn');
+    okBtn.textContent = opts.confirmLabel || 'Confirm';
+    cancelBtn.textContent = opts.cancelLabel || 'Cancel';
+    okBtn.className = opts.danger === false ? 'btn-primary' : 'btn-danger';
+
+    if (confirmResolve) { const pending = confirmResolve; confirmResolve = null; pending(false); }
+
+    return new Promise(resolve => {
+        confirmResolve = resolve;
+        if (!dialog.open) dialog.showModal();
+        setTimeout(() => cancelBtn.focus(), 30);
+    });
+}
+
+function settleConfirm(value) {
+    const dialog = document.getElementById('confirmDialog');
+    if (dialog.open) dialog.close();
+    if (confirmResolve) { const pending = confirmResolve; confirmResolve = null; pending(value); }
+}
+
+// --- Undo ---
+// Every destructive action pushes an inverse operation. Undo only ever adds
+// data back (or restores saved coordinates); it never deletes anything.
+function pushUndo(entry) {
+    undoStack.push(entry);
+    if (undoStack.length > 40) undoStack.shift();
+    updateUndoUI();
+}
+
+function updateUndoUI() {
+    const btn = document.getElementById('undoBtn');
+    const count = document.getElementById('undoCount');
+    const total = undoStack.length;
+    if (!btn || !count) return;
+    btn.disabled = total === 0;
+    count.hidden = total === 0;
+    count.textContent = String(total);
+    btn.title = total
+        ? `Undo: ${undoStack[total - 1].label} (Ctrl+Z)`
+        : 'Nothing to undo yet (Ctrl+Z)';
+}
+
+async function postJson(path, body) {
+    const res = await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error((await res.text()) || res.statusText);
+    return res.status === 204 ? null : res.json().catch(() => null);
+}
+
+function undoRestore(persons, relationships) {
+    return postJson('/api/undo', { persons: persons || [], relationships: relationships || [] });
+}
+
+async function performUndo() {
+    const entry = undoStack.pop();
+    if (!entry) return showToast('Nothing to undo yet', true);
+    try {
+        await entry.run();
+        updateUndoUI();
+        showToast('Undone: ' + entry.label);
+    } catch (err) {
+        updateUndoUI();
+        showToast('Undo failed: ' + err.message, true);
+    }
+}
+
+// --- Backup & restore ---
+async function downloadBackup() {
+    try {
+        const res = await fetch('/api/backup');
+        if (!res.ok) throw new Error(await res.text());
+        const blob = await res.blob();
+        const stamp = new Date().toISOString().slice(0, 10);
+        downloadBlob(blob, `family-tree-backup-${stamp}.json`);
+        showToast('Backup downloaded');
+    } catch (err) {
+        showToast('Backup failed: ' + err.message, true);
+    }
+}
+
+function openRestorePicker() {
+    const input = document.getElementById('restoreFileInput');
+    input.value = '';
+    input.click();
+}
+
+async function handleRestoreFileChosen(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+
+    let payload;
+    try {
+        payload = JSON.parse(await file.text());
+    } catch (err) {
+        return showToast('That file is not valid JSON', true);
+    }
+    if (!payload || !Array.isArray(payload.persons)) {
+        return showToast('That file does not look like a family tree backup', true);
+    }
+
+    const ok = await showConfirm({
+        title: 'Restore this backup?',
+        message: `This replaces your current tree (${currentPersons.length} ${currentPersons.length === 1 ? 'person' : 'people'}) with the ${payload.persons.length} ${payload.persons.length === 1 ? 'person' : 'people'} in this file. You can undo it straight afterwards.`,
+        confirmLabel: 'Restore',
+        danger: true
+    });
+    if (!ok) return;
+
+    try {
+        const before = { persons: currentPersons, relationships: currentRelationships };
+        await postJson('/api/restore', payload);
+        pushUndo({
+            label: 'the restore',
+            run: async () => {
+                await postJson('/api/restore', before);
+                selectedNodeId = null;
+                showSidebarEmpty();
+                await loadTree();
+                centerTree();
+            }
+        });
+        selectedNodeId = null;
+        showSidebarEmpty();
+        await loadTree();
+        centerTree();
+        showToast('Backup restored');
+    } catch (err) {
+        showToast('Restore failed: ' + err.message, true);
+    }
 }
 
 function escapeAttr(str) {
@@ -437,26 +597,77 @@ async function loadTree() {
             showSidebarEmpty();
         }
     }
+
+    updateChecklist();
 }
 
 // --- Relation styling helpers ---
 function relationRoleClass(relation) {
-    if (relation === 'spouse') return 'role-spouse';
-    if (relation === 'child') return 'role-child';
-    if (relation === 'sibling-full') return 'role-sibling-full';
-    if (relation === 'sibling-half') return 'role-sibling-half';
-    if (relation === 'sibling-step') return 'role-sibling-step';
-    return 'role-root';
+    switch (relation) {
+        case 'spouse': return 'role-spouse';
+        case 'spouse-divorced': return 'role-spouse-divorced';
+        case 'child': return 'role-child';
+        case 'child-adoptive': return 'role-child-adoptive';
+        case 'child-foster': return 'role-child-foster';
+        case 'child-guardian': return 'role-child-guardian';
+        case 'child-unknown': return 'role-child-unknown';
+        case 'sibling-full': return 'role-sibling-full';
+        case 'sibling-half': return 'role-sibling-half';
+        case 'sibling-step': return 'role-sibling-step';
+        default: return 'role-root';
+    }
 }
 
 function relationStroke(relation) {
     switch (relation) {
         case 'spouse': return { color: cssVar('--spouse', '#d6537e'), dash: '' };
+        case 'spouse-divorced': return { color: cssVar('--spouse', '#d6537e'), dash: '8,5' };
         case 'child': return { color: cssVar('--parent', '#d9a441'), dash: '' };
+        case 'child-adoptive': return { color: cssVar('--adoptive', '#845ef7'), dash: '' };
+        case 'child-foster': return { color: cssVar('--foster', '#0f969f'), dash: '6,4' };
+        case 'child-guardian': return { color: cssVar('--guardian', '#2f9e44'), dash: '6,4' };
+        case 'child-unknown': return { color: cssVar('--unknown', '#8a9199'), dash: '2,5' };
         case 'sibling-full': return { color: cssVar('--sibling', '#4c6ef5'), dash: '' };
         case 'sibling-half': return { color: cssVar('--sibling', '#4c6ef5'), dash: '6,4' };
         case 'sibling-step': return { color: cssVar('--sibling', '#4c6ef5'), dash: '2,4' };
         default: return { color: cssVar('--root', '#6b8b89'), dash: '' };
+    }
+}
+
+// Human readable name for a relationship, from the point of view of `selfId`.
+function relationLabelFor(rel, selfId) {
+    const raw = String(rel.relation || '');
+    const selfIsFirst = rel.person1_id === selfId;
+
+    if (raw === 'child' || raw.startsWith('child-')) {
+        const subType = raw === 'child' ? '' : raw.slice('child-'.length);
+        const qualifiers = { adoptive: 'Adoptive', foster: 'Foster', guardian: 'Guardian', unknown: 'Unknown' };
+        const qualifier = qualifiers[subType] || '';
+        if (selfIsFirst) return qualifier ? `${qualifier} child` : 'Child';
+        return qualifier ? `${qualifier} parent` : 'Parent';
+    }
+    if (raw === 'spouse') return 'Partner';
+    if (raw === 'spouse-divorced') return 'Ex-partner';
+    if (raw === 'sibling-full') return 'Full sibling';
+    if (raw === 'sibling-half') return 'Half sibling';
+    if (raw === 'sibling-step') return 'Step sibling';
+    return raw || 'Related';
+}
+
+// Short badge for the sidebar header describing how this person was added.
+function roleBadgeLabel(relation) {
+    switch (relation) {
+        case 'child': return 'Child';
+        case 'child-adoptive': return 'Adopted child';
+        case 'child-foster': return 'Foster child';
+        case 'child-guardian': return 'Ward';
+        case 'child-unknown': return 'Unknown parentage';
+        case 'spouse': return 'Partner';
+        case 'spouse-divorced': return 'Ex-partner';
+        case 'sibling-full': return 'Full sibling';
+        case 'sibling-half': return 'Half sibling';
+        case 'sibling-step': return 'Step sibling';
+        default: return '';
     }
 }
 
@@ -507,9 +718,25 @@ function renderTree() {
             ${p.facts ? `<div class="tree-node-facts">${escapeHtml(p.facts)}</div>` : ''}
         `;
 
+        node.tabIndex = 0;
+        node.setAttribute('role', 'button');
+        node.setAttribute('aria-label', `${p.name}${metaLine ? ', ' + metaLine : ''}`);
+        node.title = [p.name, metaLine, p.profession, p.birth_country].filter(Boolean).join('\n');
+
         node.addEventListener('mousedown', e => onNodeMouseDown(e, p.id));
+        node.addEventListener('keydown', e => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            if (connectMode) handleConnectClick(p.id);
+            else selectPerson(p.id);
+        });
         nodesLayer.appendChild(node);
     });
+
+    if (!currentPersons.length) {
+        const canvas = document.getElementById('treeCanvas');
+        if (canvas) { canvas.scrollLeft = 0; canvas.scrollTop = 0; }
+    }
 
     drawLines();
 }
@@ -559,10 +786,37 @@ function drawLines() {
 }
 
 async function removeConnection(relId, name1, name2) {
-    if (!confirm(`Remove the connection between ${name1} and ${name2}?`)) return;
+    askRemoveConnection(relId, `${name1} and ${name2}`);
+}
+
+async function askRemoveConnection(relId, label) {
+    const rel = currentRelationships.find(r => r.id === relId);
+    if (!rel) return;
+
+    const a = findPerson(rel.person1_id);
+    const b = findPerson(rel.person2_id);
+    const description = label || [a && a.name, b && b.name].filter(Boolean).join(' and ');
+
+    const ok = await showConfirm({
+        title: 'Remove this connection?',
+        message: `Remove the link between ${description}? You can undo it with Ctrl+Z.`,
+        confirmLabel: 'Remove',
+        danger: true
+    });
+    if (!ok) return;
+
     try {
         const res = await fetch(`/api/relationships/${relId}`, { method: 'DELETE' });
         if (!res.ok && res.status !== 204) throw new Error(await res.text());
+
+        pushUndo({
+            label: `removing the link between ${description}`,
+            run: async () => {
+                await undoRestore([], [Object.assign({}, rel)]);
+                await loadTree();
+            }
+        });
+
         showToast('Connection removed');
         loadTree();
     } catch (err) {
@@ -573,6 +827,8 @@ async function removeConnection(relId, name1, name2) {
 // --- Zoom ---
 function applyZoom() {
     document.getElementById('treeViewport').style.transform = `scale(${zoom})`;
+    const label = document.getElementById('zoomLabel');
+    if (label) label.textContent = Math.round(zoom * 100) + '%';
     syncCanvasSize();
 }
 
@@ -618,6 +874,44 @@ function centerTree() {
     canvas.scrollTop = Math.max(0, centerY * zoom - viewH / 2);
 }
 
+// Scroll the canvas so a person sits in the middle of the view. Used by the
+// search results, the breadcrumb trail and the "Centre" toolbar button.
+function centerOnPerson(id) {
+    const p = findPerson(id);
+    if (!p) return;
+    const canvas = document.getElementById('treeCanvas');
+    if (zoom < 0.55) { zoom = 0.8; applyZoom(); }
+    const cx = (p.pos_x || 0) + NODE_W / 2;
+    const cy = (p.pos_y || 0) + NODE_H / 2;
+    const left = Math.max(0, cx * zoom - canvas.clientWidth / 2);
+    const top = Math.max(0, cy * zoom - canvas.clientHeight / 2);
+    if (typeof canvas.scrollTo === 'function') {
+        canvas.scrollTo({ left, top, behavior: 'smooth' });
+    } else {
+        canvas.scrollLeft = left;
+        canvas.scrollTop = top;
+    }
+}
+
+function focusSelected() {
+    if (selectedNodeId === null) return showToast('Select a person first', true);
+    centerOnPerson(selectedNodeId);
+}
+
+// Select someone, centre the view on them and flash the card briefly.
+function jumpToPerson(id) {
+    selectPerson(id);
+    centerOnPerson(id);
+    if (sidebarCollapsed) toggleSidebar();
+    const node = document.querySelector(`.tree-node[data-id="${id}"]`);
+    if (node) {
+        node.classList.remove('flash');
+        void node.offsetWidth; // restart the animation
+        node.classList.add('flash');
+        setTimeout(() => node.classList.remove('flash'), 3600);
+    }
+}
+
 function comparePeopleByNameOrPosition(aId, bId) {
     const a = findPerson(aId);
     const b = findPerson(bId);
@@ -650,18 +944,22 @@ function parentChildEdge(rel, personIdSet) {
     if (!personIdSet.has(rel.person1_id) || !personIdSet.has(rel.person2_id)) return null;
     const relation = String(rel.relation || '').toLowerCase();
 
-    // The app stores parent -> child as relation "child". Older data and manual
-    // imports may use father/mother/parent with the same direction.
+    // Accept child-of style imports as child -> parent first: they would
+    // otherwise be caught by the "child..." prefix rule below.
+    if (relation === 'child-of' || relation === 'child_of' || relation === 'son' || relation === 'daughter') {
+        return { parent: rel.person2_id, child: rel.person1_id };
+    }
+
+    // The app stores parent -> child as relation "child", plus the subtypes
+    // child-adoptive, child-foster, child-guardian and child-unknown. Older
+    // data and manual imports may use father/mother/parent with the same
+    // direction.
     if (
-        relation === 'child' || relation === 'father' || relation === 'mother' || relation === 'parent' ||
+        relation === 'child' || relation.startsWith('child-') ||
+        relation === 'father' || relation === 'mother' || relation === 'parent' ||
         relation === 'parent-of' || relation === 'parent_of' || relation === 'father-of' || relation === 'mother-of'
     ) {
         return { parent: rel.person1_id, child: rel.person2_id };
-    }
-
-    // Accept child-of style imports as child -> parent.
-    if (relation === 'child-of' || relation === 'child_of' || relation === 'son' || relation === 'daughter') {
-        return { parent: rel.person2_id, child: rel.person1_id };
     }
 
     return null;
@@ -731,7 +1029,7 @@ function calculateTreeLayout() {
         let changed = false;
         currentRelationships.forEach(rel => {
             const relation = String(rel.relation || '').toLowerCase();
-            const sameGeneration = relation === 'spouse' || relation.startsWith('sibling-');
+            const sameGeneration = relation === 'spouse' || relation.startsWith('spouse-') || relation.startsWith('sibling-');
             if (!sameGeneration || !personIdSet.has(rel.person1_id) || !personIdSet.has(rel.person2_id)) return;
             if (hasDirectParentChild(childEdgeSet, rel.person1_id, rel.person2_id)) return;
 
@@ -800,7 +1098,16 @@ function calculateTreeLayout() {
 
 async function resetTreeLayout() {
     if (!currentPersons.length) return showToast('Nothing to arrange yet', true);
-    if (!confirm('Reset the tree layout? This will move all people into parent-to-child generations.')) return;
+
+    const ok = await showConfirm({
+        title: 'Re-arrange the tree?',
+        message: 'Everyone moves into parent-to-child generations. Manual positions are replaced — you can undo it with Ctrl+Z.',
+        confirmLabel: 'Arrange',
+        danger: false
+    });
+    if (!ok) return;
+
+    const snapshot = currentPersons.map(p => ({ id: p.id, pos_x: p.pos_x || 0, pos_y: p.pos_y || 0 }));
 
     const positions = calculateTreeLayout();
     currentPersons.forEach(p => {
@@ -813,6 +1120,19 @@ async function resetTreeLayout() {
     expandCanvasToFitTree(false);
     renderTree();
     centerTree();
+
+    pushUndo({
+        label: 'the auto-layout',
+        run: async () => {
+            await Promise.all(snapshot.map(point => fetch(`/api/persons/${point.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pos_x: point.pos_x, pos_y: point.pos_y })
+            }).then(res => { if (!res.ok) throw new Error('could not restore a position'); })));
+            await loadTree();
+            centerTree();
+        }
+    });
 
     try {
         const responses = await Promise.all(currentPersons.map(savePersonPosition));
@@ -967,12 +1287,41 @@ function selectPerson(id) {
 function showSidebarEmpty() {
     document.getElementById('sidebarEmpty').style.display = 'block';
     document.getElementById('sidebarContent').style.display = 'none';
+    document.getElementById('sidebarFooter').style.display = 'none';
+}
+
+function clearSelection() {
+    if (selectedNodeId === null) return;
+    selectedNodeId = null;
+    renderTree();
+    showSidebarEmpty();
+}
+
+function lifespanLabel(p) {
+    if (p.dob && p.dod) return `${formatDate(p.dob)} – ${formatDate(p.dod)}`;
+    if (p.dob) return `b. ${formatDate(p.dob)}`;
+    if (p.dod) return `d. ${formatDate(p.dod)}`;
+    if (p.birth_country) return p.birth_country;
+    if (p.profession) return p.profession;
+    return '';
 }
 
 function populateSidebar(p) {
     document.getElementById('sidebarEmpty').style.display = 'none';
     document.getElementById('sidebarContent').style.display = 'block';
+    document.getElementById('sidebarFooter').style.display = 'flex';
 
+    // Header card
+    document.getElementById('sidebarAvatar').src = p.image_url || placeholderAvatar;
+    document.getElementById('sidebarAvatar').alt = p.name || 'Photo';
+    document.getElementById('sidebarPersonName').textContent = p.name || '';
+    document.getElementById('sidebarPersonDates').textContent = lifespanLabel(p);
+    const roleBadge = document.getElementById('sidebarPersonRole');
+    const badge = roleBadgeLabel(roleForPerson(p.id));
+    roleBadge.textContent = badge;
+    roleBadge.hidden = !badge;
+
+    // Fields
     document.getElementById('fieldName').value = p.name || '';
     document.getElementById('fieldDob').value = p.dob || '';
     document.getElementById('fieldDod').value = p.dod || '';
@@ -981,6 +1330,84 @@ function populateSidebar(p) {
     document.getElementById('fieldFacts').value = p.facts || '';
     document.getElementById('sidebarPhotoPreview').src = p.image_url || placeholderAvatar;
     document.getElementById('sidebarPhotoInput').value = '';
+
+    renderConnections(p);
+    renderLineage(p);
+    clearDirty();
+}
+
+function markDirty() {
+    if (sidebarDirty) return;
+    sidebarDirty = true;
+    document.getElementById('dirtyIndicator').hidden = false;
+}
+
+function clearDirty() {
+    sidebarDirty = false;
+    document.getElementById('dirtyIndicator').hidden = true;
+}
+
+// --- Connections list for the selected person ---
+function renderConnections(p) {
+    const list = document.getElementById('connectionsList');
+    const rels = currentRelationships.filter(r => r.person1_id === p.id || r.person2_id === p.id);
+
+    if (!rels.length) {
+        list.innerHTML = '<div class="connections-empty">No connections yet.<br>Add a relative above, or use Link mode to join two existing people.</div>';
+        return;
+    }
+
+    list.innerHTML = rels.map(rel => {
+        const otherId = rel.person1_id === p.id ? rel.person2_id : rel.person1_id;
+        const other = findPerson(otherId);
+        if (!other) return '';
+        const label = relationLabelFor(rel, p.id);
+        return `
+            <div class="connection-row">
+                <button class="connection-open" onclick="jumpToPerson(${other.id})" title="Jump to ${escapeAttr(other.name)}">
+                    <span class="connection-type">${escapeHtml(label)}</span>
+                    <span class="connection-name">${escapeHtml(other.name)}</span>
+                </button>
+                <button class="connection-remove" onclick="askRemoveConnection(${rel.id})" title="Remove this connection">×</button>
+            </div>`;
+    }).join('');
+}
+
+// --- Ancestry breadcrumb: earliest ancestor › … › selected person ---
+function parentIdsOf(id) {
+    const idSet = new Set(currentPersons.map(p => p.id));
+    return currentRelationships
+        .map(rel => parentChildEdge(rel, idSet))
+        .filter(Boolean)
+        .filter(edge => edge.child === id)
+        .map(edge => edge.parent);
+}
+
+function renderLineage(p) {
+    const nav = document.getElementById('lineageCrumbs');
+    const chain = [p.id];
+    const seen = new Set(chain);
+
+    let cursor = p.id;
+    for (let guard = 0; guard < 40; guard++) {
+        const parents = parentIdsOf(cursor)
+            .filter(id => !seen.has(id))
+            .sort(comparePeopleByNameOrPosition);
+        if (!parents.length) break;
+        cursor = parents[0];
+        chain.unshift(cursor);
+        seen.add(cursor);
+    }
+
+    if (chain.length < 2) { nav.innerHTML = ''; return; }
+
+    nav.innerHTML = chain.map((id, index) => {
+        const person = findPerson(id);
+        if (!person) return '';
+        const current = id === p.id ? ' current' : '';
+        const sep = index ? '<span class="crumb-sep">›</span>' : '';
+        return `${sep}<button class="crumb${current}" onclick="jumpToPerson(${id})" title="${escapeAttr(person.name)}">${escapeHtml(person.name)}</button>`;
+    }).join('');
 }
 
 function switchTab(tab) {
@@ -1010,6 +1437,7 @@ async function saveSelectedPerson() {
         });
         if (!res.ok) throw new Error(await res.text());
         showToast('Person saved');
+        clearDirty();
         loadTree();
     } catch (err) {
         showToast('Failed to save: ' + err.message, true);
@@ -1035,12 +1463,36 @@ async function uploadSelectedPersonPhoto(file) {
 async function deleteSelectedPerson() {
     if (selectedNodeId === null) return;
     const p = findPerson(selectedNodeId);
-    const name = p ? p.name : 'this person';
-    if (!confirm(`Remove ${name} from the family tree? This also removes their relationships.`)) return;
+    if (!p) return;
+    const name = p.name || 'this person';
+    const links = currentRelationships.filter(r => r.person1_id === p.id || r.person2_id === p.id);
+
+    const ok = await showConfirm({
+        title: `Delete ${name}?`,
+        message: links.length
+            ? `This removes ${name} from the tree along with ${links.length} ${links.length === 1 ? 'connection' : 'connections'}. You can undo it with Ctrl+Z.`
+            : `This removes ${name} from the tree. You can undo it with Ctrl+Z.`,
+        confirmLabel: 'Delete',
+        danger: true
+    });
+    if (!ok) return;
+
+    const personSnapshot = Object.assign({}, p);
+    const linkSnapshot = links.map(rel => Object.assign({}, rel));
 
     try {
         const res = await fetch(`/api/persons/${selectedNodeId}`, { method: 'DELETE' });
         if (!res.ok && res.status !== 204) throw new Error(await res.text());
+
+        pushUndo({
+            label: `deleting ${name}`,
+            run: async () => {
+                await undoRestore([personSnapshot], linkSnapshot);
+                selectedNodeId = personSnapshot.id;
+                await loadTree();
+            }
+        });
+
         showToast(`${name} removed`);
         selectedNodeId = null;
         showSidebarEmpty();
@@ -1080,6 +1532,57 @@ function handleConnectClick(id) {
     pendingLink = null;
 }
 
+// Directional map for the manual "Connect People" dialog: the option value in
+// the select → the stored relation plus which click is person1/person2.
+const LINK_CHOICES = {
+    'a-parent-of-b': { relation: 'child', first: 'p1' },
+    'a-adoptive-parent-of-b': { relation: 'child-adoptive', first: 'p1' },
+    'a-foster-parent-of-b': { relation: 'child-foster', first: 'p1' },
+    'a-guardian-of-b': { relation: 'child-guardian', first: 'p1' },
+    'a-unknown-parent-of-b': { relation: 'child-unknown', first: 'p1' },
+    'b-parent-of-a': { relation: 'child', first: 'p2' },
+    'b-adoptive-parent-of-a': { relation: 'child-adoptive', first: 'p2' },
+    'spouse': { relation: 'spouse', first: 'symmetric' },
+    'spouse-divorced': { relation: 'spouse-divorced', first: 'symmetric' },
+    'sibling-full': { relation: 'sibling-full', first: 'symmetric' },
+    'sibling-half': { relation: 'sibling-half', first: 'symmetric' },
+    'sibling-step': { relation: 'sibling-step', first: 'symmetric' }
+};
+
+function isParentChildRelation(relation) {
+    const value = String(relation || '').toLowerCase();
+    return value === 'child' || value.startsWith('child-') ||
+        value === 'father' || value === 'mother' || value === 'parent' ||
+        value === 'parent-of' || value === 'parent_of';
+}
+
+// Returns an error message, or null when the link is safe to create. Used
+// before creating a person-and-link in one go and before a manual link.
+function linkError(person1, person2, relation) {
+    if (person1 === person2) return 'Pick two different people';
+
+    const sameDirection = currentRelationships.some(r =>
+        r.relation === relation && r.person1_id === person1 && r.person2_id === person2);
+    const mirrored = currentRelationships.some(r =>
+        r.relation === relation && r.person1_id === person2 && r.person2_id === person1);
+    const symmetric = !isParentChildRelation(relation);
+
+    if (sameDirection || (symmetric && mirrored)) {
+        return 'Those two are already linked that way';
+    }
+
+    if (isParentChildRelation(relation)) {
+        const idSet = new Set(currentPersons.map(p => p.id));
+        const cycle = currentRelationships.some(rel => {
+            const edge = parentChildEdge(rel, idSet);
+            return edge && edge.parent === person2 && edge.child === person1;
+        });
+        if (cycle) return 'That would make them their own ancestor';
+    }
+
+    return null;
+}
+
 function openLinkDialog(idA, idB) {
     pendingLink = { idA, idB };
     const a = findPerson(idA), b = findPerson(idB);
@@ -1098,16 +1601,19 @@ async function submitLinkDialog() {
     if (!pendingLink || !pendingLink.idB) return;
     const { idA, idB } = pendingLink;
     const choice = document.getElementById('linkRelationType').value;
+    const mapping = LINK_CHOICES[choice] || { relation: choice, first: 'symmetric' };
 
-    let person1 = idA, person2 = idB, relation = choice;
-    if (choice === 'a-parent-of-b') { relation = 'child'; person1 = idA; person2 = idB; }
-    else if (choice === 'b-parent-of-a') { relation = 'child'; person1 = idB; person2 = idA; }
+    let person1 = idA, person2 = idB;
+    if (mapping.first === 'p2') { person1 = idB; person2 = idA; }
+
+    const problem = linkError(person1, person2, mapping.relation);
+    if (problem) return showToast(problem, true);
 
     try {
         const res = await fetch('/api/relationships', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ person1_id: person1, person2_id: person2, relation })
+            body: JSON.stringify({ person1_id: person1, person2_id: person2, relation: mapping.relation })
         });
         if (!res.ok) throw new Error(await res.text());
         showToast('Connected');
@@ -1138,10 +1644,13 @@ function openQuickAdd(anchorIdArg, type) {
     };
     document.getElementById('quickAddTitle').textContent = titles[type] || 'Add Person';
     document.getElementById('quickAddName').value = '';
+    document.getElementById('quickAddDob').value = '';
     document.getElementById('quickAddPic').value = '';
     quickAddCroppedPhoto = null;
     document.getElementById('quickAddPreview').src = placeholderAvatar;
     document.getElementById('quickAddSiblingRow').style.display = type === 'sibling' ? 'block' : 'none';
+    document.getElementById('quickAddParentRow').style.display = type === 'parent' ? 'block' : 'none';
+    document.getElementById('quickAddPartnerRow').style.display = type === 'spouse' ? 'block' : 'none';
 
     document.getElementById('quickAddDialog').showModal();
     setTimeout(() => document.getElementById('quickAddName').focus(), 50);
@@ -1176,19 +1685,25 @@ function computePosition(anchorId, type) {
     const ay = anchor.pos_y || 0;
 
     if (type === 'spouse') {
-        const spouseCount = currentRelationships.filter(r => r.person1_id === anchorId && r.relation === 'spouse').length;
+        const spouseCount = currentRelationships.filter(r =>
+            (r.person1_id === anchorId || r.person2_id === anchorId) &&
+            String(r.relation || '').startsWith('spouse')).length;
         x = ax + 180;
         y = ay + spouseCount * 170;
     } else if (type === 'sibling') {
-        const siblingCount = currentRelationships.filter(r => r.person1_id === anchorId && r.relation.startsWith('sibling-')).length;
+        const siblingCount = currentRelationships.filter(r =>
+            (r.person1_id === anchorId || r.person2_id === anchorId) &&
+            String(r.relation || '').startsWith('sibling-')).length;
         x = ax - 180 - siblingCount * 180;
         y = ay;
     } else if (type === 'child') {
-        const childCount = currentRelationships.filter(r => r.person1_id === anchorId && r.relation === 'child').length;
+        const childCount = currentRelationships.filter(r =>
+            r.person1_id === anchorId && isParentChildRelation(r.relation)).length;
         x = ax + childCount * 170 - (childCount > 0 ? 85 : 0);
         y = ay + 200;
     } else if (type === 'parent') {
-        const parentCount = currentRelationships.filter(r => r.person2_id === anchorId && r.relation === 'child').length;
+        const parentCount = currentRelationships.filter(r =>
+            r.person2_id === anchorId && isParentChildRelation(r.relation)).length;
         x = ax + parentCount * 170 - (parentCount > 0 ? 85 : 0);
         y = ay - 200;
     } else {
@@ -1208,11 +1723,13 @@ async function submitQuickAdd() {
 
     const pos = computePosition(anchorId, type);
     const pic = quickAddCroppedPhoto;
+    const dob = document.getElementById('quickAddDob').value;
 
     const formData = new FormData();
     formData.append('name', name);
     formData.append('pos_x', pos.x);
     formData.append('pos_y', pos.y);
+    if (dob) formData.append('dob', dob);
     if (pic) formData.append('pic', pic);
 
     try {
@@ -1221,26 +1738,24 @@ async function submitQuickAdd() {
         const newPerson = await res.json();
 
         if (anchorId) {
-            let relation = type; // 'spouse' | 'child' | 'parent'
             let person1 = anchorId, person2 = newPerson.id;
 
             if (type === 'sibling') {
                 const subType = document.getElementById('quickAddSiblingType').value;
-                relation = 'sibling-' + subType;
+                await postJson('/api/relationships', { person1_id: person1, person2_id: person2, relation: 'sibling-' + subType });
             } else if (type === 'parent') {
-                // Stored as a normal 'child' relation, but reversed: the new
-                // node is the parent (person1), the anchor is the child (person2).
-                relation = 'child';
-                person1 = newPerson.id;
-                person2 = anchorId;
+                // Stored as a parent→child link with the new person first: the
+                // new node is the parent, the anchor is the child.
+                const subType = document.getElementById('quickAddParentType').value;
+                const relation = 'child' + (subType ? '-' + subType : '');
+                await postJson('/api/relationships', { person1_id: newPerson.id, person2_id: anchorId, relation });
+            } else if (type === 'spouse') {
+                const subType = document.getElementById('quickAddPartnerType').value;
+                const relation = subType === 'divorced' ? 'spouse-divorced' : 'spouse';
+                await postJson('/api/relationships', { person1_id: person1, person2_id: person2, relation });
+            } else {
+                await postJson('/api/relationships', { person1_id: person1, person2_id: person2, relation: 'child' });
             }
-
-            const relRes = await fetch('/api/relationships', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ person1_id: person1, person2_id: person2, relation })
-            });
-            if (!relRes.ok) throw new Error(await relRes.text());
         }
 
         showToast(`${name} added`);
@@ -1353,6 +1868,7 @@ async function exportImage(format) {
 
     if (format === 'svg') {
         downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), 'family-tree.svg');
+        noteExported();
         showToast('Tree exported as SVG');
         return;
     }
@@ -1381,6 +1897,7 @@ async function exportImage(format) {
         const mime = format === 'jpeg' ? 'image/jpeg' : 'image/png';
         canvas.toBlob(blob => {
             downloadBlob(blob, `family-tree.${format === 'jpeg' ? 'jpg' : 'png'}`);
+            noteExported();
             showToast(`Tree exported as ${format.toUpperCase()}`);
         }, mime, 0.95);
     } catch (err) {
@@ -1388,11 +1905,217 @@ async function exportImage(format) {
     }
 }
 
+function noteExported() {
+    localStorage.setItem(EXPORTED_KEY, '1');
+    updateChecklist();
+}
+
 function exportJSON() {
     if (!currentPersons.length) return showToast('Nothing to export yet', true);
     const data = { persons: currentPersons, relationships: currentRelationships };
     downloadBlob(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), 'family-tree.json');
+    noteExported();
     showToast('Tree data exported as JSON');
+}
+
+// --- Search & quick navigation ---
+function highlightMatch(text, query) {
+    const safe = escapeHtml(text);
+    if (!query) return safe;
+    const index = safe.toLowerCase().indexOf(query.toLowerCase());
+    if (index < 0) return safe;
+    return safe.slice(0, index) + '<mark>' + safe.slice(index, index + query.length) + '</mark>' + safe.slice(index + query.length);
+}
+
+function searchFor(query) {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+
+    return currentPersons
+        .map(person => {
+            const name = (person.name || '').toLowerCase();
+            const haystack = [person.name, person.profession, person.birth_country, person.facts, person.dob, person.dod]
+                .filter(Boolean).join(' ').toLowerCase();
+            let score = -1;
+            if (name.startsWith(q)) score = 0;
+            else if (name.includes(q)) score = 1;
+            else if (haystack.includes(q)) score = 2;
+            return { person, score };
+        })
+        .filter(entry => entry.score >= 0)
+        .sort((a, b) => a.score - b.score || String(a.person.name).localeCompare(String(b.person.name)))
+        .slice(0, 8)
+        .map(entry => entry.person);
+}
+
+function renderSearchResults() {
+    const box = document.getElementById('searchResults');
+    const input = document.getElementById('searchInput');
+    const query = input.value.trim();
+
+    if (!query) return closeSearchResults();
+
+    searchMatches = searchFor(query);
+    searchActiveIndex = searchMatches.length ? 0 : -1;
+    input.setAttribute('aria-expanded', String(searchMatches.length > 0));
+
+    if (!searchMatches.length) {
+        box.innerHTML = `<div class="search-empty">No one matches “${escapeHtml(query)}”</div>`;
+        box.hidden = false;
+        return;
+    }
+
+    box.innerHTML = searchMatches.map((person, index) => {
+        const meta = [person.dob ? formatDate(person.dob) : '', person.profession, person.birth_country]
+            .filter(Boolean).join(' · ');
+        const img = person.image_url || placeholderAvatar;
+        return `
+            <button type="button" class="search-result${index === searchActiveIndex ? ' active' : ''}" role="option"
+                    data-id="${person.id}" onmousedown="event.preventDefault()" onclick="pickSearchResult(${person.id})">
+                <img src="${escapeAttr(img)}" alt="">
+                <span class="sr-body">
+                    <span class="sr-name">${highlightMatch(person.name, query)}</span>
+                    ${meta ? `<span class="sr-meta">${escapeHtml(meta)}</span>` : ''}
+                </span>
+            </button>`;
+    }).join('');
+    box.hidden = false;
+}
+
+function closeSearchResults() {
+    const box = document.getElementById('searchResults');
+    const input = document.getElementById('searchInput');
+    if (box) box.hidden = true;
+    if (input) input.setAttribute('aria-expanded', 'false');
+    searchMatches = [];
+    searchActiveIndex = -1;
+}
+
+function moveSearchSelection(delta) {
+    if (!searchMatches.length) return;
+    searchActiveIndex = (searchActiveIndex + delta + searchMatches.length) % searchMatches.length;
+    document.querySelectorAll('.search-result').forEach((el, index) => {
+        el.classList.toggle('active', index === searchActiveIndex);
+        if (index === searchActiveIndex && typeof el.scrollIntoView === 'function') {
+            el.scrollIntoView({ block: 'nearest' });
+        }
+    });
+}
+
+function pickSearchResult(id) {
+    const input = document.getElementById('searchInput');
+    input.value = '';
+    closeSearchResults();
+    input.blur();
+    jumpToPerson(id);
+}
+
+function onSearchKeyDown(e) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); moveSearchSelection(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); moveSearchSelection(-1); }
+    else if (e.key === 'Enter') {
+        e.preventDefault();
+        const person = searchMatches[searchActiveIndex] || searchMatches[0];
+        if (person) pickSearchResult(person.id);
+    } else if (e.key === 'Escape') {
+        e.preventDefault();
+        document.getElementById('searchInput').value = '';
+        closeSearchResults();
+        document.getElementById('searchInput').blur();
+    }
+}
+
+// --- Getting-started checklist ---
+function rootPersonId() {
+    if (!currentPersons.length) return null;
+    return currentPersons.reduce((lowest, p) => (p.id < lowest ? p.id : lowest), currentPersons[0].id);
+}
+
+function checklistState() {
+    const root = rootPersonId();
+    const edges = (() => {
+        const idSet = new Set(currentPersons.map(p => p.id));
+        return currentRelationships.map(rel => parentChildEdge(rel, idSet)).filter(Boolean);
+    })();
+
+    const hasParent = root !== null && edges.some(edge => edge.child === root);
+    const hasChild = root !== null && edges.some(edge => edge.parent === root);
+    const hasPartner = root !== null && currentRelationships.some(r =>
+        String(r.relation || '').startsWith('spouse') && (r.person1_id === root || r.person2_id === root));
+    const hasPhoto = currentPersons.some(p => p.image_url);
+
+    return {
+        root: currentPersons.length > 0,
+        parents: hasParent,
+        partner: hasPartner,
+        children: hasChild,
+        photo: hasPhoto,
+        export: localStorage.getItem(EXPORTED_KEY) === '1'
+    };
+}
+
+function renderChecklist() {
+    const panel = document.getElementById('checklistPanel');
+    if (localStorage.getItem(CHECKLIST_KEY) === '1') { panel.style.display = 'none'; return; }
+
+    const state = checklistState();
+    const items = CHECKLIST_STEPS.map(step => {
+        const done = !!state[step.id];
+        const action = done ? '' : `<button class="checklist-action" onclick="runChecklistStep('${step.id}')">${step.action}</button>`;
+        return `
+            <li class="checklist-item${done ? ' done' : ''}">
+                <span class="checklist-mark" aria-hidden="true">✓</span>
+                <span class="checklist-label">${step.label}</span>
+                ${action}
+            </li>`;
+    }).join('');
+
+    const doneCount = CHECKLIST_STEPS.filter(step => state[step.id]).length;
+    const finished = doneCount === CHECKLIST_STEPS.length;
+
+    document.getElementById('checklistItems').innerHTML = items +
+        (finished ? '<li class="checklist-all-done">🎉 All done — your tree is ready to share.</li>' : '');
+    document.getElementById('checklistProgress').textContent = `${doneCount} / ${CHECKLIST_STEPS.length}`;
+    panel.style.display = 'block';
+}
+
+function updateChecklist() {
+    if (localStorage.getItem(CHECKLIST_KEY) === '1') return;
+    renderChecklist();
+}
+
+function runChecklistStep(stepId) {
+    const step = CHECKLIST_STEPS.find(s => s.id === stepId);
+    if (step) step.run();
+}
+
+function dismissChecklist() {
+    localStorage.setItem(CHECKLIST_KEY, '1');
+    document.getElementById('checklistPanel').style.display = 'none';
+    showToast('Checklist hidden — reopen it from Settings');
+}
+
+function showChecklist() {
+    localStorage.removeItem(CHECKLIST_KEY);
+    renderChecklist();
+    if (document.getElementById('settingsDialog').open) closeSettingsDialog();
+}
+
+function focusPhotoTab() {
+    if (selectedNodeId === null) {
+        return showToast('Select a person first', true);
+    }
+    if (sidebarCollapsed) toggleSidebar();
+    switchTab('image');
+    setTimeout(() => {
+        const input = document.getElementById('sidebarPhotoInput');
+        if (input) input.click();
+    }, 60);
+}
+
+function startConnectFromSidebar() {
+    if (!connectMode) toggleConnectMode();
+    showToast('Click two people to link them');
 }
 
 // --- App updates ---
@@ -1469,6 +2192,13 @@ function setActivePill(mode) {
     document.getElementById('pillLocal').classList.toggle('active', mode === 'local');
     document.getElementById('pillS3').classList.toggle('active', mode === 's3');
     document.getElementById('pillDrive').classList.toggle('active', mode === 'drive');
+
+    const chip = document.getElementById('storageChip');
+    const label = document.getElementById('storageChipLabel');
+    const normalized = mode === 's3' ? 's3' : mode === 'drive' ? 'drive' : 'local';
+    const names = { local: 'Local disk', s3: 'AWS S3', drive: 'Google Drive' };
+    if (chip) chip.dataset.mode = normalized;
+    if (label) label.textContent = names[normalized];
 }
 
 async function selectStorage(mode) {
@@ -1585,8 +2315,8 @@ window.addEventListener('message', async (event) => {
 
 window.onload = async () => {
     applyTheme(localStorage.getItem('familytree.theme') || 'white');
-    loadTree();
     applyZoom();
+    updateUndoUI();
 
     const canvas = document.getElementById('treeCanvas');
     canvas.addEventListener('wheel', onCanvasWheel, { passive: false });
@@ -1597,7 +2327,17 @@ window.onload = async () => {
         if (!e.target.closest('.dropdown')) {
             document.getElementById('exportMenu').classList.remove('open');
         }
+        if (!e.target.closest('.search-box')) closeSearchResults();
     });
+
+    wireConfirmDialog();
+    wireSearch();
+    wireShortcuts();
+    wireDirtyTracking();
+    wireRestorePicker();
+    renderChecklist();
+
+    loadTree();
 
     const modeRes = await fetch('/api/settings');
     storageMode = await modeRes.text();
@@ -1608,3 +2348,67 @@ window.onload = async () => {
         showToast('Connected to Google Drive');
     }
 };
+
+function wireConfirmDialog() {
+    const dialog = document.getElementById('confirmDialog');
+    document.getElementById('confirmOkBtn').addEventListener('click', () => settleConfirm(true));
+    document.getElementById('confirmCancelBtn').addEventListener('click', () => settleConfirm(false));
+    dialog.addEventListener('cancel', e => { e.preventDefault(); settleConfirm(false); });
+    dialog.addEventListener('close', () => {
+        if (confirmResolve) { const pending = confirmResolve; confirmResolve = null; pending(false); }
+    });
+    dialog.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); settleConfirm(true); }
+    });
+}
+
+function wireSearch() {
+    const input = document.getElementById('searchInput');
+    input.addEventListener('input', renderSearchResults);
+    input.addEventListener('focus', renderSearchResults);
+    input.addEventListener('keydown', onSearchKeyDown);
+    input.addEventListener('blur', () => setTimeout(closeSearchResults, 120));
+}
+
+function wireRestorePicker() {
+    const input = document.getElementById('restoreFileInput');
+    input.addEventListener('change', () => handleRestoreFileChosen(input));
+}
+
+function wireDirtyTracking() {
+    ['fieldName', 'fieldDob', 'fieldDod', 'fieldBirthCountry', 'fieldProfession', 'fieldFacts']
+        .forEach(id => document.getElementById(id).addEventListener('input', markDirty));
+}
+
+function wireShortcuts() {
+    document.addEventListener('keydown', e => {
+        const active = document.activeElement;
+        const typing = !!active && (
+            active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' ||
+            active.tagName === 'SELECT' || active.isContentEditable);
+
+        // Never fight a dialog, a form field, or the browser's own undo.
+        if (document.querySelector('dialog[open]')) return;
+
+        if (e.key === '/' && !typing) {
+            e.preventDefault();
+            const input = document.getElementById('searchInput');
+            input.focus();
+            input.select();
+            return;
+        }
+
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z') && !typing) {
+            e.preventDefault();
+            performUndo();
+            return;
+        }
+
+        if (e.key === 'Escape') {
+            if (document.activeElement === document.getElementById('searchInput')) return;
+            if (document.getElementById('searchResults').hidden === false) return;
+            if (connectMode) { toggleConnectMode(); return; }
+            if (selectedNodeId !== null) clearSelection();
+        }
+    });
+}
