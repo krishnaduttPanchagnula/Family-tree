@@ -261,17 +261,18 @@ This project includes:
 The GitHub Actions workflow runs when a tag matching `v*` is pushed.
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.4.0
+git push origin v0.4.0
 ```
 
 The release workflow will:
 
 1. Check out the repository
 2. Set up Go from `go.mod`
-3. Install CGO build tools for SQLite support
+3. Install the CGO build tools and the cross-compilers (SQLite needs cgo)
 4. Run `go test ./...`
 5. Build and publish a GitHub release with GoReleaser
+6. Replace the generated notes with the matching `CHANGELOG.md` section
 
 ## UX ideas to make family tree creation better
 
@@ -294,7 +295,7 @@ A first-run checklist walks users through:
 
 This reduces the blank-canvas problem for new users. Reopen it from Settings.
 
-### Auto-layout — partially done
+### Auto-layout — done
 
 `Auto-layout` in the tool rail arranges everyone into parent-to-child
 generations, and `Centre` frames the selected person.
@@ -302,8 +303,8 @@ generations, and `Centre` frames the selected person.
 Useful modes:
 
 - Ancestors above, descendants below — done
-- Compact family view
-- Fan/tree view
+- Compact family view — done
+- Fan/tree view — done
 - Center on selected person — done
 
 ### Better relationship model — mostly done

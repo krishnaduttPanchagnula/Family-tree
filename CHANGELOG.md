@@ -117,7 +117,7 @@ leaving the house.
   `make run`) — `go run main.go` compiles that one file and leaves the rest of
   the package undefined.
 - `PORT=9000 make run` picks a different port.
-- 13 Go tests cover life events, GEDCOM round trips, CSV, the backup archive,
+- 12 Go tests cover life events, GEDCOM round trips, CSV, the backup archive,
   snapshots, the read-only guard and the frontend asset contract.
 - `competitor-research.md` records how this app compares with the rest of the
   family-tree category.
