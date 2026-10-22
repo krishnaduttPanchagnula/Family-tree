@@ -3,479 +3,752 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Family Tree Builder is a self-hosted, local-first app for charting your family history: drag-and-drop people, rich relationships, photos and image export.">
     <title>Family Tree Builder</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%23256f6a%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%225%22%20r%3D%222.4%22%2F%3E%3Ccircle%20cx%3D%226%22%20cy%3D%2219%22%20r%3D%222.4%22%2F%3E%3Ccircle%20cx%3D%2218%22%20cy%3D%2219%22%20r%3D%222.4%22%2F%3E%3Cpath%20d%3D%22M12%207.4v4.2M6%2016.6v-2.4a2%202%200%200%201%202-2h8a2%202%200%200%201%202%202v2.4%22%2F%3E%3C%2Fsvg%3E">
+    <link rel="stylesheet" href="/static/fonts.css">
     <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/feat-print.css">
+    <link rel="stylesheet" href="/static/feat-relations.css">
+    <link rel="stylesheet" href="/static/feat-layout.css">
+    <link rel="stylesheet" href="/static/feat-timeline.css">
+    <link rel="stylesheet" href="/static/feat-data.css">
+    <link rel="stylesheet" href="/static/feat-share.css">
+    <link rel="stylesheet" href="/static/feat-styles.css">
 </head>
 <body>
 
-    <!-- Top header: brand, search, undo -->
-    <header class="app-header">
-        <div class="brand">
-            <span class="brand-logo">🌳</span>
-            <span class="brand-name">Family Tree Builder</span>
-        </div>
+<!-- Icon sprite. One family, one stroke weight, drawn in currentColor. -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+    <symbol id="i-tree" viewBox="0 0 24 24">
+        <circle cx="12" cy="5" r="2.4"/><circle cx="6" cy="19" r="2.4"/><circle cx="18" cy="19" r="2.4"/>
+        <path d="M12 7.4v4.2M6 16.6v-2.4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2.4"/>
+    </symbol>
+    <symbol id="i-search" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="6.5"/><path d="m20 20-3.7-3.7"/>
+    </symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24">
+        <path d="M4 10h10a5 5 0 0 1 0 10h-3"/><path d="m4 10 4-4M4 10l4 4"/>
+    </symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M6 20a6 6 0 0 1 12 0"/></symbol>
+    <symbol id="i-child" viewBox="0 0 24 24"><circle cx="12" cy="14" r="3"/><path d="M6.5 20.5a5.5 5.5 0 0 1 11 0"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24">
+        <circle cx="9" cy="8" r="3"/><path d="M2.8 20a6.2 6.2 0 0 1 12.4 0"/>
+        <path d="M16 5.4a3 3 0 0 1 0 5.2M17.8 14.4A6.2 6.2 0 0 1 21.2 20"/>
+    </symbol>
+    <symbol id="i-pair" viewBox="0 0 24 24">
+        <circle cx="7" cy="9" r="2.8"/><circle cx="17" cy="9" r="2.8"/>
+        <path d="M2 19a5 5 0 0 1 10 0M12 19a5 5 0 0 1 10 0"/>
+    </symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24">
+        <path d="M12 20.2S4.8 15.6 4.8 10.4A4.4 4.4 0 0 1 12 7.3a4.4 4.4 0 0 1 7.2 3.1c0 5.2-7.2 9.8-7.2 9.8Z"/>
+    </symbol>
+    <symbol id="i-link" viewBox="0 0 24 24">
+        <path d="M10.2 13.8a4.6 4.6 0 0 0 6.5 0l2-2a4.6 4.6 0 0 0-6.5-6.5l-1 1"/>
+        <path d="M13.8 10.2a4.6 4.6 0 0 0-6.5 0l-2 2a4.6 4.6 0 0 0 6.5 6.5l1-1"/>
+    </symbol>
+    <symbol id="i-legend" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" stroke="none"/>
+    </symbol>
+    <symbol id="i-fit" viewBox="0 0 24 24">
+        <path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/>
+    </symbol>
+    <symbol id="i-layout" viewBox="0 0 24 24">
+        <path d="M4 5.5h16M4 12h16M4 18.5h16"/>
+        <circle cx="8" cy="5.5" r="1.9" fill="currentColor" stroke="none"/>
+        <circle cx="14.5" cy="12" r="1.9" fill="currentColor" stroke="none"/>
+        <circle cx="10" cy="18.5" r="1.9" fill="currentColor" stroke="none"/>
+    </symbol>
+    <symbol id="i-target" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="1.6"/>
+        <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/>
+    </symbol>
+    <symbol id="i-download" viewBox="0 0 24 24">
+        <path d="M12 3.5v11.5M7.5 10.5 12 15l4.5-4.5M4.5 19.5h15"/>
+    </symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24">
+        <path d="M19.8 9.2A8 8 0 1 0 20 12"/><path d="M20 4v5.2h-5.2"/>
+    </symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24">
+        <path d="M4 7h9M17.5 7H20M4 17h3.5M12 17h8"/>
+        <circle cx="15" cy="7" r="2.3"/><circle cx="9.5" cy="17" r="2.3"/>
+    </symbol>
+    <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m14.5 5.5-6.5 6.5 6.5 6.5"/></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9.5 5.5 6.5 6.5-6.5 6.5"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6.5 6.5 11 11M17.5 6.5l-11 11"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.7 4.7L19 7.5"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24">
+        <path d="M4 7h16M9.5 7V4.8h5V7M6.2 7l.9 12.2h9.8L17.8 7M10 11v5M14 11v5"/>
+    </symbol>
+    <symbol id="i-image" viewBox="0 0 24 24">
+        <rect x="3" y="4.5" width="18" height="15" rx="2"/><circle cx="8.5" cy="10" r="1.7"/>
+        <path d="m3.6 17.4 4.9-4.9 4.3 4.3 3.2-3.2 4.4 4.4"/>
+    </symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4.5M7.5 9 12 4.5 16.5 9M4.5 20h15"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24">
+        <path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4.2L11 8.5h8.5A1.5 1.5 0 0 1 21 10v7.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5Z"/>
+    </symbol>
+    <symbol id="i-db" viewBox="0 0 24 24">
+        <ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/>
+        <path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/>
+    </symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24">
+        <path d="M7.5 18.5a4 4 0 0 1-.4-8 5.5 5.5 0 0 1 10.5 1.3 3.4 3.4 0 0 1-.6 6.7Z"/>
+    </symbol>
+    <symbol id="i-external" viewBox="0 0 24 24">
+        <path d="M14 4h6v6M20 4l-8.5 8.5M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>
+    </symbol>
+    <symbol id="i-sparkle" viewBox="0 0 24 24">
+        <path d="M12 3.5 13.9 9l5.6 2-5.6 2-1.9 5.5L10.1 13l-5.6-2 5.6-2Z"/>
+    </symbol>
+    <symbol id="i-print" viewBox="0 0 24 24">
+        <path d="M7 9V4h10v5M7 18H5.5A1.5 1.5 0 0 1 4 16.5v-5A1.5 1.5 0 0 1 5.5 10h13a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5H17"/>
+        <rect x="7" y="14" width="10" height="6.5" rx="1"/>
+    </symbol>
+    <symbol id="i-poster" viewBox="0 0 24 24">
+        <rect x="4" y="3.5" width="16" height="17" rx="1.5"/><path d="M8 8h8M8 12h8M8 16h5"/>
+    </symbol>
+    <symbol id="i-relations" viewBox="0 0 24 24">
+        <circle cx="12" cy="5" r="2.2"/><circle cx="6" cy="18.5" r="2.2"/><circle cx="18" cy="18.5" r="2.2"/>
+        <path d="M12 7.2v4.3M6 16.3v-2.2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2.2"/>
+    </symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24">
+        <rect x="3.5" y="5" width="17" height="15.5" rx="1.5"/><path d="M3.5 9.5h17M8 3.5V6M16 3.5V6"/>
+    </symbol>
+    <symbol id="i-gedcom" viewBox="0 0 24 24">
+        <path d="M14 3.5H7.5A1.5 1.5 0 0 0 6 5v14a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 18 19V7.5Z"/>
+        <path d="M14 3.5V7a.5.5 0 0 0 .5.5H18M9 12h6M9 15.5h4"/>
+    </symbol>
+    <symbol id="i-archive" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="4.5" rx="1.2"/><path d="M4.8 8.5V19a1.5 1.5 0 0 0 1.5 1.5h11.4a1.5 1.5 0 0 0 1.5-1.5V8.5M10 12h4"/>
+    </symbol>
+    <symbol id="i-share" viewBox="0 0 24 24">
+        <circle cx="6" cy="12" r="2.5"/><circle cx="17.5" cy="6" r="2.5"/><circle cx="17.5" cy="18" r="2.5"/>
+        <path d="m8.3 10.8 6.9-3.6M8.3 13.2l6.9 3.6"/>
+    </symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24">
+        <rect x="4.5" y="10" width="15" height="10.5" rx="1.5"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/>
+    </symbol>
+    <symbol id="i-history" viewBox="0 0 24 24">
+        <path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.4"/><path d="M3.5 4.5v4h4M12 7.5V12l3 1.8"/>
+    </symbol>
+    <symbol id="i-csv" viewBox="0 0 24 24">
+        <rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 9.5h17M9 9.5v10M15 9.5v10"/>
+    </symbol>
+    <symbol id="i-ancestor" viewBox="0 0 24 24">
+        <circle cx="12" cy="5" r="2.2"/><circle cx="6" cy="12" r="2.2"/><circle cx="18" cy="12" r="2.2"/><circle cx="12" cy="19" r="2.2"/>
+        <path d="M12 7.2v2.6M6 14.2v2.6M18 14.2v2.6M12 14.2v2.6M10.6 12h2.8"/>
+    </symbol>
+    <symbol id="i-descendant" viewBox="0 0 24 24">
+        <circle cx="12" cy="19" r="2.2"/><circle cx="6" cy="12" r="2.2"/><circle cx="18" cy="12" r="2.2"/><circle cx="12" cy="5" r="2.2"/>
+        <path d="M12 16.8v-2.6M6 9.8V7.2M18 9.8V7.2M12 7.2V5.6M10.6 12h2.8"/>
+    </symbol>
+    <symbol id="i-lan" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="8" height="6" rx="1.2"/><rect x="13" y="14" width="8" height="6" rx="1.2"/><path d="M7 10v4a2 2 0 0 0 2 2h4"/>
+    </symbol>
+    <symbol id="i-style" viewBox="0 0 24 24">
+        <path d="M4 7h7M15 7h5M4 12h11M19 12h1M4 17h3M11 17h9"/>
+        <circle cx="13" cy="7" r="2"/><circle cx="17" cy="12" r="2"/><circle cx="9" cy="17" r="2"/>
+    </symbol>
+</svg>
 
-        <div class="search-box" role="search">
-            <span class="search-icon" aria-hidden="true">⌕</span>
-            <input type="search" id="searchInput" placeholder="Search people, places, professions…"
-                   autocomplete="off" spellcheck="false"
-                   aria-label="Search people" aria-expanded="false" aria-controls="searchResults">
-            <kbd class="search-kbd" aria-hidden="true">/</kbd>
-            <div id="searchResults" class="search-results" role="listbox" aria-label="Search results" hidden></div>
-        </div>
-
-        <div class="header-actions">
-            <button id="undoBtn" class="header-btn" onclick="performUndo()" disabled
-                    title="Undo the last delete or layout change (Ctrl+Z)">
-                <span aria-hidden="true">↶</span><span class="header-btn-label">Undo</span>
-                <span id="undoCount" class="badge" hidden>0</span>
-            </button>
-            <button id="storageChip" class="header-btn storage-chip" onclick="openSettingsDialog()"
-                    title="Photo storage and app settings">
-                <span class="chip-dot" aria-hidden="true"></span>
-                <span id="storageChipLabel">Local disk</span>
-            </button>
-        </div>
-    </header>
-
-    <!-- Main app body: left info panel + canvas -->
-    <div class="app-body">
-
-        <!-- Left sidebar: selected person's details & tree actions -->
-        <aside id="sidebar" class="sidebar" aria-label="Person details">
-            <div class="sidebar-topbar">
-                <button id="sidebarCollapseBtn" class="sidebar-collapse-btn" onclick="toggleSidebar()" title="Collapse panel">‹ Hide panel</button>
-            </div>
-
-            <!-- Shown when nothing is selected yet -->
-            <div id="sidebarEmpty" class="sidebar-empty">
-                <div class="sidebar-empty-art" aria-hidden="true">🌳</div>
-                <p class="sidebar-empty-title">No one selected</p>
-                <p class="hint">Click a card on the tree to view and edit that person.</p>
-                <button class="btn-primary" onclick="openQuickAdd(null, 'root')">+ Add a person</button>
-                <p class="hint hint-spaced">New here? The getting-started checklist in the corner walks you through it.</p>
-            </div>
-
-            <!-- Shown when a person is selected -->
-            <div id="sidebarContent" class="sidebar-content" style="display:none;">
-                <div class="person-header">
-                    <img id="sidebarAvatar" class="person-avatar" src="" alt="">
-                    <div class="person-ident">
-                        <div id="sidebarPersonName" class="person-name"></div>
-                        <div id="sidebarPersonDates" class="person-dates"></div>
-                        <span id="sidebarPersonRole" class="person-role" hidden></span>
-                    </div>
-                    <button class="ghost-icon-btn" onclick="clearSelection()" title="Deselect this person (Esc)">×</button>
-                </div>
-
-                <nav id="lineageCrumbs" class="lineage-crumbs" aria-label="Path to earliest ancestor"></nav>
-
-                <div class="sidebar-tabs" role="tablist">
-                    <button class="tab-btn active" data-tab="personal" role="tab" onclick="switchTab('personal')">Personal</button>
-                    <button class="tab-btn" data-tab="biography" role="tab" onclick="switchTab('biography')">Bio</button>
-                    <button class="tab-btn" data-tab="image" role="tab" onclick="switchTab('image')">Photo</button>
-                    <button class="tab-btn" data-tab="relations" role="tab" onclick="switchTab('relations')">Family</button>
-                </div>
-
-                <div class="tab-panel" data-panel="personal">
-                    <label class="field-label" for="fieldName">Name</label>
-                    <input type="text" id="fieldName" autocomplete="off">
-
-                    <div class="field-row">
-                        <div class="field-col">
-                            <label class="field-label" for="fieldDob">Date of birth</label>
-                            <input type="date" id="fieldDob">
-                        </div>
-                        <div class="field-col">
-                            <label class="field-label" for="fieldDod">Date of death</label>
-                            <input type="date" id="fieldDod">
-                        </div>
-                    </div>
-
-                    <label class="field-label" for="fieldBirthCountry">Place of birth</label>
-                    <input type="text" id="fieldBirthCountry" placeholder="e.g. Dublin, Ireland" autocomplete="off">
-
-                    <label class="field-label" for="fieldProfession">Profession</label>
-                    <input type="text" id="fieldProfession" placeholder="e.g. Teacher" autocomplete="off">
-                </div>
-
-                <div class="tab-panel" data-panel="biography" style="display:none;">
-                    <label class="field-label" for="fieldFacts">Interesting facts</label>
-                    <textarea id="fieldFacts" rows="12" placeholder="Stories, nicknames, where they lived, what they were known for…"></textarea>
-                </div>
-
-                <div class="tab-panel" data-panel="image" style="display:none;">
-                    <div class="sidebar-photo-preview">
-                        <img id="sidebarPhotoPreview" src="" alt="Current photo">
-                    </div>
-                    <p class="hint">Choose a photo and adjust the crop before it is saved.</p>
-                    <label class="file-label">
-                        <span class="file-label-btn">Choose photo…</span>
-                        <input type="file" id="sidebarPhotoInput" accept="image/*" onchange="handlePhotoFileChosen(this, 'sidebar')">
-                    </label>
-                </div>
-
-                <div class="tab-panel" data-panel="relations" style="display:none;">
-                    <div class="panel-section-title">Add a relative</div>
-                    <div class="add-grid">
-                        <button class="btn-outline" onclick="openQuickAdd(null, 'parent')">👪 Parent</button>
-                        <button class="btn-outline" onclick="openQuickAdd(null, 'spouse')">💑 Partner</button>
-                        <button class="btn-outline" onclick="openQuickAdd(null, 'sibling')">👬 Sibling</button>
-                        <button class="btn-outline" onclick="openQuickAdd(null, 'child')">🙂 Child</button>
-                    </div>
-
-                    <div class="panel-section-title">Connections</div>
-                    <div id="connectionsList" class="connections-list"></div>
-
-                    <button class="btn-outline full" onclick="startConnectFromSidebar()">⇄ Link two existing people</button>
-                </div>
-            </div>
-
-            <!-- Sticky footer: save state + destructive action -->
-            <div id="sidebarFooter" class="sidebar-footer" style="display:none;">
-                <div class="sidebar-footer-row">
-                    <span id="dirtyIndicator" class="dirty-indicator" hidden>● Unsaved changes</span>
-                    <button id="savePersonBtn" class="btn-save" onclick="saveSelectedPerson()">Save changes</button>
-                </div>
-                <button class="btn-ghost-danger" onclick="deleteSelectedPerson()">Delete person</button>
-            </div>
-        </aside>
-
-        <!-- Canvas: the free-floating, zoomable, pannable tree -->
-        <main class="canvas-area">
-            <div id="treeCanvas" class="tree-canvas">
-                <div id="treeSizer" class="tree-sizer"></div>
-                <div id="treeViewport" class="tree-viewport">
-                    <svg id="treeLines" class="tree-lines"></svg>
-                    <div id="treeNodes" class="tree-nodes"></div>
-                </div>
-                <div id="canvasEmpty" class="empty-state" style="display:none;">
-                    <div class="empty-card">
-                        <div class="empty-art" aria-hidden="true">🌳</div>
-                        <h2>Start your family tree</h2>
-                        <p>Add yourself first, then grow the tree one relation at a time — parents, a partner, children.</p>
-                        <div class="empty-actions">
-                            <button class="btn-primary" onclick="openQuickAdd(null, 'root')">+ Add yourself</button>
-                            <button class="btn-secondary" onclick="openRestorePicker()">↩ Restore a backup</button>
-                        </div>
-                        <p class="empty-tip">Tip: press <kbd>/</kbd> to search, <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo.</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Floating toolbar, top-right of the canvas, grouped by purpose -->
-            <div class="floating-toolbar" role="toolbar" aria-label="Tree tools">
-                <div class="tool-group">
-                    <button class="icon-btn" title="Zoom out" aria-label="Zoom out" onclick="adjustZoom(-0.1)">−</button>
-                    <span id="zoomLabel" class="zoom-label" title="Zoom level — hold Ctrl and scroll to zoom">100%</span>
-                    <button class="icon-btn" title="Zoom in" aria-label="Zoom in" onclick="adjustZoom(0.1)">+</button>
-                    <button class="icon-btn labeled" title="Fit the whole tree in view" onclick="centerTree()">⛶ Fit</button>
-                </div>
-
-                <div class="tool-sep" aria-hidden="true"></div>
-
-                <div class="tool-group">
-                    <button class="icon-btn labeled" title="Arrange everyone into parent-to-child generations" onclick="resetTreeLayout()">↧ Auto-layout</button>
-                    <button class="icon-btn labeled" title="Centre the view on the selected person" onclick="focusSelected()">◎ Centre</button>
-                </div>
-
-                <div class="tool-sep" aria-hidden="true"></div>
-
-                <div class="tool-group">
-                    <button id="connectBtn" class="icon-btn labeled" title="Link or unlink two existing people" onclick="toggleConnectMode()">⇄ Link</button>
-                    <button id="legendBtn" class="icon-btn labeled" title="Show the relationship colour legend" onclick="toggleLegend()">◐ Legend</button>
-                </div>
-
-                <div class="tool-sep" aria-hidden="true"></div>
-
-                <div class="tool-group">
-                    <div class="dropdown">
-                        <button class="icon-btn labeled" onclick="toggleExportMenu()" aria-haspopup="menu">⬇ Export ▾</button>
-                        <div id="exportMenu" class="dropdown-menu">
-                            <button onclick="exportImage('jpeg')">JPEG image</button>
-                            <button onclick="exportImage('png')">PNG image</button>
-                            <button onclick="exportImage('svg')">SVG image</button>
-                            <div class="dropdown-sep"></div>
-                            <button onclick="exportJSON()">Raw data (JSON)</button>
-                        </div>
-                    </div>
-                    <button class="icon-btn" title="Reload the tree" aria-label="Reload the tree" onclick="loadTree()">⟳</button>
-                    <button class="icon-btn" title="Settings" aria-label="Settings" onclick="openSettingsDialog()">⚙</button>
-                </div>
-            </div>
-
-            <div id="legendPanel" class="legend-panel" style="display:none;">
-                <div class="legend-title">Relationship Legend</div>
-                <div class="legend-item"><span class="legend-swatch root"></span><span>Root / no links yet</span></div>
-                <div class="legend-item"><span class="legend-swatch spouse"></span><span>Partner / spouse</span></div>
-                <div class="legend-item"><span class="legend-swatch spouse divorced"></span><span>Ex-partner / separated</span></div>
-                <div class="legend-item"><span class="legend-swatch parent"></span><span>Parent → child</span></div>
-                <div class="legend-item"><span class="legend-swatch parent adoptive"></span><span>Adoptive parent → child</span></div>
-                <div class="legend-item"><span class="legend-swatch parent foster"></span><span>Foster parent → child</span></div>
-                <div class="legend-item"><span class="legend-swatch parent guardian"></span><span>Guardian → child</span></div>
-                <div class="legend-item"><span class="legend-swatch parent unknown"></span><span>Unknown parent → child</span></div>
-                <div class="legend-item"><span class="legend-swatch sibling full"></span><span>Full sibling</span></div>
-                <div class="legend-item"><span class="legend-swatch sibling half"></span><span>Half sibling</span></div>
-                <div class="legend-item"><span class="legend-swatch sibling step"></span><span>Step sibling</span></div>
-            </div>
-
-            <div id="connectHint" class="connect-hint" style="display:none;">
-                <span>Click a person, then a second person to link them. Click an existing line to remove it. <kbd>Esc</kbd> exits.</span>
-                <button class="link-btn" onclick="toggleConnectMode()">Done</button>
-            </div>
-
-            <!-- First-run / getting-started checklist -->
-            <div id="checklistPanel" class="checklist-panel" style="display:none;">
-                <div class="checklist-head">
-                    <span class="checklist-title">Getting started</span>
-                    <span id="checklistProgress" class="checklist-progress">0 / 6</span>
-                    <button class="checklist-close" onclick="dismissChecklist()" title="Hide the checklist">×</button>
-                </div>
-                <ul id="checklistItems" class="checklist-items"></ul>
-            </div>
-
-            <button id="sidebarExpandBtn" class="sidebar-expand-btn" onclick="toggleSidebar()" title="Show panel" style="display:none;">›</button>
-        </main>
+<!-- Top header: brand, search, undo -->
+<header class="app-header">
+    <div class="brand">
+        <svg class="icon brand-logo" aria-hidden="true"><use href="#i-tree"/></svg>
+        <span class="brand-name">Family Tree Builder</span>
     </div>
 
-    <!-- Yes / no confirmation (replaces the browser confirm() box) -->
-    <dialog id="confirmDialog">
-        <div class="dialog-form">
-            <h3 id="confirmTitle">Are you sure?</h3>
-            <p id="confirmMessage" class="dialog-copy"></p>
-            <div class="dialog-actions">
-                <button type="button" class="btn-secondary" id="confirmCancelBtn">Cancel</button>
-                <button type="button" class="btn-danger" id="confirmOkBtn">Confirm</button>
+    <div class="search-box" role="search">
+        <svg class="icon search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <input type="search" id="searchInput" placeholder="Search people, places, professions…"
+               autocomplete="off" spellcheck="false"
+               aria-label="Search people" aria-expanded="false" aria-controls="searchResults">
+        <kbd class="search-kbd" aria-hidden="true">/</kbd>
+        <div id="searchResults" class="search-results" role="listbox" aria-label="Search results" hidden></div>
+    </div>
+
+    <div class="header-actions">
+        <button id="undoBtn" class="header-btn" onclick="performUndo()" disabled
+                title="Undo the last delete or layout change (Ctrl+Z)">
+            <svg class="icon" aria-hidden="true"><use href="#i-undo"/></svg>
+            <span class="header-btn-label">Undo</span>
+            <span id="undoCount" class="badge" hidden>0</span>
+        </button>
+        <button id="storageChip" class="header-btn storage-chip" onclick="openSettingsDialog()"
+                title="Photo storage and app settings">
+            <span class="chip-dot" aria-hidden="true"></span>
+            <span id="storageChipLabel">Local disk</span>
+        </button>
+    </div>
+</header>
+
+<!-- Main app body: left info panel + canvas -->
+<div class="app-body">
+
+    <!-- Left sidebar: selected person's details & tree actions -->
+    <aside id="sidebar" class="sidebar" aria-label="Person details">
+        <div class="sidebar-topbar">
+            <button id="sidebarCollapseBtn" class="icon-quiet-btn" onclick="toggleSidebar()"
+                    title="Hide panel" aria-label="Hide panel">
+                <svg class="icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>
+            </button>
+        </div>
+
+        <!-- Shown when nothing is selected yet -->
+        <div id="sidebarEmpty" class="sidebar-empty">
+            <svg class="icon sidebar-empty-art" aria-hidden="true"><use href="#i-tree"/></svg>
+            <p class="sidebar-empty-title">No one selected</p>
+            <p class="hint">Click a card on the tree to view and edit that person.</p>
+            <button class="btn-primary" onclick="openQuickAdd(null, 'root')">
+                <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg> Add a person
+            </button>
+            <p class="hint hint-spaced">New here? The getting-started checklist walks you through it.</p>
+        </div>
+
+        <!-- Shown when a person is selected -->
+        <div id="sidebarContent" class="sidebar-content" style="display:none;">
+            <div class="person-header">
+                <img id="sidebarAvatar" class="person-avatar" src="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%279%27%20r%3D%274%27%20fill%3D%27%2393a19e%27%2F%3E%3Cpath%20d%3D%27M4%2021a8%208%200%200%201%2016%200z%27%20fill%3D%27%2393a19e%27%2F%3E%3C%2Fsvg%3E" alt="">
+                <div class="person-ident">
+                    <div id="sidebarPersonName" class="person-name"></div>
+                    <div id="sidebarPersonDates" class="person-dates"></div>
+                    <span id="sidebarPersonRole" class="person-role" hidden></span>
+                </div>
+                <button class="icon-quiet-btn" onclick="clearSelection()" title="Deselect this person (Esc)" aria-label="Deselect this person">
+                    <svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>
+                </button>
+            </div>
+
+            <nav id="lineageCrumbs" class="lineage-crumbs" aria-label="Path to earliest ancestor"></nav>
+
+            <div class="sidebar-tabs" role="tablist">
+                <button class="tab-btn active" data-tab="personal" role="tab" onclick="switchTab('personal')">Personal</button>
+                <button class="tab-btn" data-tab="biography" role="tab" onclick="switchTab('biography')">Bio</button>
+                <button class="tab-btn" data-tab="image" role="tab" onclick="switchTab('image')">Photo</button>
+                <button class="tab-btn" data-tab="relations" role="tab" onclick="switchTab('relations')">Family</button>
+                <button class="tab-btn" data-tab="events" role="tab" onclick="switchTab('events')">Events</button>
+            </div>
+
+            <div class="tab-panel" data-panel="personal">
+                <label class="field-label" for="fieldName">Name</label>
+                <input type="text" id="fieldName" autocomplete="off">
+
+                <div class="field-row">
+                    <div class="field-col">
+                        <label class="field-label" for="fieldDob">Date of birth</label>
+                        <input type="date" id="fieldDob">
+                    </div>
+                    <div class="field-col">
+                        <label class="field-label" for="fieldDod">Date of death</label>
+                        <input type="date" id="fieldDod">
+                    </div>
+                </div>
+
+                <label class="field-label" for="fieldBirthCountry">Place of birth</label>
+                <input type="text" id="fieldBirthCountry" placeholder="e.g. Dublin, Ireland" autocomplete="off">
+
+                <label class="field-label" for="fieldProfession">Profession</label>
+                <input type="text" id="fieldProfession" placeholder="e.g. Teacher" autocomplete="off">
+            </div>
+
+            <div class="tab-panel" data-panel="biography" style="display:none;">
+                <label class="field-label" for="fieldFacts">Interesting facts</label>
+                <textarea id="fieldFacts" rows="12" placeholder="Stories, nicknames, where they lived, what they were known for…"></textarea>
+            </div>
+
+            <div class="tab-panel" data-panel="image" style="display:none;">
+                <div class="sidebar-photo-preview">
+                    <img id="sidebarPhotoPreview" src="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%279%27%20r%3D%274%27%20fill%3D%27%2393a19e%27%2F%3E%3Cpath%20d%3D%27M4%2021a8%208%200%200%201%2016%200z%27%20fill%3D%27%2393a19e%27%2F%3E%3C%2Fsvg%3E" alt="Current photo">
+                </div>
+                <p class="hint">Choose a photo and adjust the crop before it is saved.</p>
+                <label class="file-label">
+                    <span class="file-label-btn">
+                        <svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg> Choose photo…
+                    </span>
+                    <input type="file" id="sidebarPhotoInput" accept="image/*" onchange="handlePhotoFileChosen(this, 'sidebar')">
+                </label>
+            </div>
+
+            <div class="tab-panel" data-panel="relations" style="display:none;">
+                <div class="panel-section-title">Connections</div>
+                <div id="connectionsList" class="connections-list"></div>
+
+                <button class="btn-outline full" onclick="startConnectFromSidebar()">
+                    <svg class="icon" aria-hidden="true"><use href="#i-link"/></svg> Link two existing people
+                </button>
+
+                <button class="link-hint" onclick="toggleAddMenu()">
+                    <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>
+                    Add a parent, partner, sibling or child
+                </button>
+            </div>
+
+            <div class="tab-panel" data-panel="events" style="display:none;">
+                <div id="eventsPanel"></div>
             </div>
         </div>
-    </dialog>
 
-    <!-- Quick add popover: root / parent / spouse / sibling / child -->
-    <dialog id="quickAddDialog">
-        <form method="dialog" class="dialog-form" onsubmit="event.preventDefault(); submitQuickAdd();">
-            <h3 id="quickAddTitle">Add Person</h3>
-            <div class="dialog-preview">
-                <img id="quickAddPreview" src="" alt="preview">
+        <!-- Sticky footer: save state + destructive action -->
+        <div id="sidebarFooter" class="sidebar-footer" style="display:none;">
+            <div class="sidebar-footer-row">
+                <span id="dirtyIndicator" class="dirty-indicator" hidden>
+                    <span class="dirty-dot" aria-hidden="true"></span> Unsaved changes
+                </span>
+                <button id="savePersonBtn" class="btn-save" onclick="saveSelectedPerson()" disabled>Save changes</button>
             </div>
-            <label class="field-label" for="quickAddName">Name</label>
-            <input type="text" id="quickAddName" placeholder="Full name" required autocomplete="off">
-            <label class="field-label" for="quickAddDob">Date of birth (optional)</label>
-            <input type="date" id="quickAddDob">
-            <div id="quickAddParentRow" style="display:none;">
-                <label class="field-label" for="quickAddParentType">Type of parent</label>
-                <select id="quickAddParentType">
-                    <option value="">Biological parent</option>
-                    <option value="adoptive">Adoptive parent</option>
-                    <option value="foster">Foster parent</option>
-                    <option value="guardian">Guardian</option>
-                    <option value="unknown">Unknown parent (placeholder)</option>
-                </select>
-            </div>
-            <div id="quickAddPartnerRow" style="display:none;">
-                <label class="field-label" for="quickAddPartnerType">Type of partnership</label>
-                <select id="quickAddPartnerType">
-                    <option value="">Partner / married</option>
-                    <option value="divorced">Divorced / separated</option>
-                </select>
-            </div>
-            <div id="quickAddSiblingRow" style="display:none;">
-                <label class="field-label" for="quickAddSiblingType">Type of sibling</label>
-                <select id="quickAddSiblingType">
-                    <option value="full">Full sibling (same parents)</option>
-                    <option value="half">Half sibling (one shared parent)</option>
-                    <option value="step">Step sibling (no shared parent)</option>
-                </select>
-            </div>
-            <label class="field-label">Photo (optional)</label>
-            <label class="file-label">
-                <span class="file-label-btn">Choose photo…</span>
-                <input type="file" id="quickAddPic" accept="image/*" onchange="previewQuickAddPhoto()">
-            </label>
-            <div class="dialog-actions">
-                <button type="button" class="btn-secondary" onclick="closeQuickAdd()">Cancel</button>
-                <button type="submit">Add</button>
-            </div>
-        </form>
-    </dialog>
+            <button class="btn-ghost-danger" onclick="deleteSelectedPerson()">
+                <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg> Delete person
+            </button>
+        </div>
+    </aside>
 
-    <!-- Manually link two existing people (Link mode) -->
-    <dialog id="linkDialog">
-        <form method="dialog" class="dialog-form" onsubmit="event.preventDefault(); submitLinkDialog();">
-            <h3>Connect People</h3>
-            <p id="linkDialogNames" class="dialog-copy"></p>
-            <label class="field-label" for="linkRelationType">Relationship</label>
-            <select id="linkRelationType">
-                <optgroup label="Parent and child">
-                    <option value="a-parent-of-b">First person is the biological parent of the second</option>
-                    <option value="a-adoptive-parent-of-b">First person is the adoptive parent of the second</option>
-                    <option value="a-foster-parent-of-b">First person is the foster parent of the second</option>
-                    <option value="a-guardian-of-b">First person is the guardian of the second</option>
-                    <option value="a-unknown-parent-of-b">First person is an unknown parent of the second</option>
-                    <option value="b-parent-of-a">Second person is the biological parent of the first</option>
-                    <option value="b-adoptive-parent-of-a">Second person is the adoptive parent of the first</option>
-                </optgroup>
-                <optgroup label="Partners">
-                    <option value="spouse">They are partners / married</option>
-                    <option value="spouse-divorced">They are divorced / separated</option>
-                </optgroup>
-                <optgroup label="Siblings">
-                    <option value="sibling-full">Full siblings (same parents)</option>
-                    <option value="sibling-half">Half siblings (one shared parent)</option>
-                    <option value="sibling-step">Step siblings (no shared parent)</option>
-                </optgroup>
+    <!-- Canvas: the free-floating, zoomable, pannable tree -->
+    <main class="canvas-area">
+        <div id="treeCanvas" class="tree-canvas">
+            <div id="treeSizer" class="tree-sizer"></div>
+            <div id="treeViewport" class="tree-viewport">
+                <svg id="treeLines" class="tree-lines"></svg>
+                <div id="treeNodes" class="tree-nodes"></div>
+            </div>
+            <div id="canvasEmpty" class="empty-state" style="display:none;">
+                <div class="empty-card">
+                    <svg class="icon empty-art" aria-hidden="true"><use href="#i-tree"/></svg>
+                    <h2>Start your family tree</h2>
+                    <p>Add yourself first, then grow the tree one relation at a time — parents, a partner, children.</p>
+                    <div class="empty-actions">
+                        <button class="btn-primary" onclick="openQuickAdd(null, 'root')">
+                            <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg> Add yourself
+                        </button>
+                        <button class="btn-secondary" onclick="openRestorePicker()">
+                            <svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg> Restore a backup
+                        </button>
+                    </div>
+                    <p class="empty-tip">Tip: press <kbd>/</kbd> to search, <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Canvas tool rail: the single place every tree action lives -->
+        <div class="tool-rail" role="toolbar" aria-label="Tree tools">
+            <div class="rail-group">
+                <div class="dropdown">
+                    <button id="addBtn" class="rail-btn rail-btn-primary" onclick="toggleAddMenu()"
+                            aria-haspopup="menu" aria-expanded="false" title="Add a person">
+                        <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>
+                        <span class="sr-only">Add a person</span>
+                    </button>
+                    <div id="addMenu" class="dropdown-menu dropdown-menu-rail" role="menu">
+                        <p class="menu-hint" id="addMenuHint">Select someone on the tree to add them as a relative.</p>
+                        <button role="menuitem" onclick="openQuickAdd(null, 'root')">
+                            <svg class="icon" aria-hidden="true"><use href="#i-user"/></svg> A new person
+                        </button>
+                        <button role="menuitem" data-needs-selection onclick="openQuickAdd(null, 'parent')">
+                            <svg class="icon" aria-hidden="true"><use href="#i-users"/></svg> A parent
+                        </button>
+                        <button role="menuitem" data-needs-selection onclick="openQuickAdd(null, 'spouse')">
+                            <svg class="icon" aria-hidden="true"><use href="#i-heart"/></svg> A partner
+                        </button>
+                        <button role="menuitem" data-needs-selection onclick="openQuickAdd(null, 'sibling')">
+                            <svg class="icon" aria-hidden="true"><use href="#i-pair"/></svg> A sibling
+                        </button>
+                        <button role="menuitem" data-needs-selection onclick="openQuickAdd(null, 'child')">
+                            <svg class="icon" aria-hidden="true"><use href="#i-child"/></svg> A child
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rail-group">
+                <button class="rail-btn" onclick="adjustZoom(-0.1)" title="Zoom out" aria-label="Zoom out">
+                    <svg class="icon" aria-hidden="true"><use href="#i-minus"/></svg>
+                </button>
+                <span id="zoomLabel" class="zoom-label" title="Zoom level — hold Ctrl and scroll to zoom">100%</span>
+                <button class="rail-btn" onclick="adjustZoom(0.1)" title="Zoom in" aria-label="Zoom in">
+                    <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>
+                </button>
+            </div>
+
+            <div class="rail-group">
+                <button class="rail-btn" onclick="centerTree()" title="Fit the whole tree in view" aria-label="Fit the whole tree in view">
+                    <svg class="icon" aria-hidden="true"><use href="#i-fit"/></svg>
+                </button>
+                <button class="rail-btn" onclick="openLayoutDialog()" title="Arrange everyone into parent-to-child generations" aria-label="Auto-layout the tree">
+                    <svg class="icon" aria-hidden="true"><use href="#i-layout"/></svg>
+                </button>
+                <button class="rail-btn" onclick="focusSelected()" title="Centre the view on the selected person" aria-label="Centre on the selected person">
+                    <svg class="icon" aria-hidden="true"><use href="#i-target"/></svg>
+                </button>
+                <button class="rail-btn" onclick="openStylesDialog()" title="Change how the tree looks" aria-label="Tree styles">
+                    <svg class="icon" aria-hidden="true"><use href="#i-style"/></svg>
+                </button>
+            </div>
+
+            <div class="rail-group">
+                <button id="connectBtn" class="rail-btn" onclick="onLinkButtonClick()" title="Link or unlink two existing people" aria-label="Link two people" aria-pressed="false">
+                    <svg class="icon" aria-hidden="true"><use href="#i-link"/></svg>
+                </button>
+                <button id="legendBtn" class="rail-btn" onclick="toggleLegend()" title="Show the relationship colour legend" aria-label="Relationship legend" aria-pressed="false">
+                    <svg class="icon" aria-hidden="true"><use href="#i-legend"/></svg>
+                </button>
+            </div>
+
+            <div class="rail-group">
+                <button class="rail-btn" onclick="openRelationsDialog()" title="Find how two people are related" aria-label="Find a relation">
+                    <svg class="icon" aria-hidden="true"><use href="#i-relations"/></svg>
+                </button>
+            </div>
+
+            <div class="rail-spacer"></div>
+
+            <div class="rail-group">
+                <div class="dropdown">
+                    <button id="exportBtn" class="rail-btn" onclick="toggleExportMenu()" aria-haspopup="menu" aria-expanded="false" title="Export the tree">
+                        <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>
+                        <span class="sr-only">Export</span>
+                    </button>
+                    <div id="exportMenu" class="dropdown-menu dropdown-menu-rail dropdown-menu-up" role="menu">
+                        <button role="menuitem" onclick="openPrintDialog()">Print chart…</button>
+                        <div class="dropdown-sep"></div>
+                        <button role="menuitem" onclick="exportImage('jpeg')">JPEG image</button>
+                        <button role="menuitem" onclick="exportImage('png')">PNG image</button>
+                        <button role="menuitem" onclick="exportImage('svg')">SVG image</button>
+                        <div class="dropdown-sep"></div>
+                        <button role="menuitem" onclick="exportJSON()">Raw data (JSON)</button>
+                    </div>
+                </div>
+                <button class="rail-btn" onclick="loadTree()" title="Reload the tree" aria-label="Reload the tree">
+                    <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+                </button>
+                <button id="settingsBtn" class="rail-btn" onclick="openSettingsDialog()" title="Settings" aria-label="Settings">
+                    <svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <div id="legendPanel" class="legend-panel" style="display:none;">
+            <div class="legend-title">Relationship Legend</div>
+            <div class="legend-item"><span class="legend-swatch root"></span><span>Root / no links yet</span></div>
+            <div class="legend-item"><span class="legend-swatch spouse"></span><span>Partner / spouse</span></div>
+            <div class="legend-item"><span class="legend-swatch spouse divorced"></span><span>Ex-partner / separated</span></div>
+            <div class="legend-item"><span class="legend-swatch parent"></span><span>Parent → child</span></div>
+            <div class="legend-item"><span class="legend-swatch parent adoptive"></span><span>Adoptive parent → child</span></div>
+            <div class="legend-item"><span class="legend-swatch parent foster"></span><span>Foster parent → child</span></div>
+            <div class="legend-item"><span class="legend-swatch parent guardian"></span><span>Guardian → child</span></div>
+            <div class="legend-item"><span class="legend-swatch parent unknown"></span><span>Unknown parent → child</span></div>
+            <div class="legend-item"><span class="legend-swatch sibling full"></span><span>Full sibling</span></div>
+            <div class="legend-item"><span class="legend-swatch sibling half"></span><span>Half sibling</span></div>
+            <div class="legend-item"><span class="legend-swatch sibling step"></span><span>Step sibling</span></div>
+        </div>
+
+        <div id="connectHint" class="connect-hint" style="display:none;">
+            <svg class="icon" aria-hidden="true"><use href="#i-link"/></svg>
+            <span>Click a person, then a second person to link them. Click an existing line to remove it. <kbd>Esc</kbd> exits.</span>
+            <button class="link-btn" onclick="toggleConnectMode()">Done</button>
+        </div>
+
+        <!-- First-run / getting-started checklist -->
+        <div id="checklistPanel" class="checklist-panel" style="display:none;">
+            <div class="checklist-head">
+                <span class="checklist-title">Getting started</span>
+                <span id="checklistProgress" class="checklist-progress">0 / 6</span>
+                <button class="icon-quiet-btn" onclick="dismissChecklist()" title="Hide the checklist" aria-label="Hide the checklist">
+                    <svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>
+                </button>
+            </div>
+            <ul id="checklistItems" class="checklist-items"></ul>
+        </div>
+
+        <button id="sidebarExpandBtn" class="sidebar-expand-btn" onclick="toggleSidebar()" title="Show panel" aria-label="Show panel" style="display:none;">
+            <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+        </button>
+    </main>
+</div>
+
+<!-- Yes / no confirmation (replaces the browser confirm() box) -->
+<dialog id="confirmDialog">
+    <div class="dialog-form">
+        <h3 id="confirmTitle">Are you sure?</h3>
+        <p id="confirmMessage" class="dialog-copy"></p>
+        <div class="dialog-actions">
+            <button type="button" class="btn-secondary" id="confirmCancelBtn">Cancel</button>
+            <button type="button" class="btn-danger" id="confirmOkBtn">Confirm</button>
+        </div>
+    </div>
+</dialog>
+
+<!-- Quick add popover: root / parent / spouse / sibling / child -->
+<dialog id="quickAddDialog">
+    <form method="dialog" class="dialog-form" onsubmit="event.preventDefault(); submitQuickAdd();">
+        <h3 id="quickAddTitle">Add Person</h3>
+        <div class="dialog-preview">
+            <img id="quickAddPreview" src="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%279%27%20r%3D%274%27%20fill%3D%27%2393a19e%27%2F%3E%3Cpath%20d%3D%27M4%2021a8%208%200%200%201%2016%200z%27%20fill%3D%27%2393a19e%27%2F%3E%3C%2Fsvg%3E" alt="preview">
+        </div>
+        <label class="field-label" for="quickAddName">Name</label>
+        <input type="text" id="quickAddName" placeholder="Full name" required autocomplete="off">
+        <label class="field-label" for="quickAddDob">Date of birth (optional)</label>
+        <input type="date" id="quickAddDob">
+        <div id="quickAddParentRow" style="display:none;">
+            <label class="field-label" for="quickAddParentType">Type of parent</label>
+            <select id="quickAddParentType">
+                <option value="">Biological parent</option>
+                <option value="adoptive">Adoptive parent</option>
+                <option value="foster">Foster parent</option>
+                <option value="guardian">Guardian</option>
+                <option value="unknown">Unknown parent (placeholder)</option>
             </select>
-            <div class="dialog-actions">
-                <button type="button" class="btn-secondary" onclick="closeLinkDialog()">Cancel</button>
-                <button type="submit">Connect</button>
+        </div>
+        <div id="quickAddPartnerRow" style="display:none;">
+            <label class="field-label" for="quickAddPartnerType">Type of partnership</label>
+            <select id="quickAddPartnerType">
+                <option value="">Partner / married</option>
+                <option value="divorced">Divorced / separated</option>
+            </select>
+        </div>
+        <div id="quickAddSiblingRow" style="display:none;">
+            <label class="field-label" for="quickAddSiblingType">Type of sibling</label>
+            <select id="quickAddSiblingType">
+                <option value="full">Full sibling (same parents)</option>
+                <option value="half">Half sibling (one shared parent)</option>
+                <option value="step">Step sibling (no shared parent)</option>
+            </select>
+        </div>
+        <label class="field-label">Photo (optional)</label>
+        <label class="file-label">
+            <span class="file-label-btn">
+                <svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg> Choose photo…
+            </span>
+            <input type="file" id="quickAddPic" accept="image/*" onchange="previewQuickAddPhoto()">
+        </label>
+        <div class="dialog-actions">
+            <button type="button" class="btn-secondary" onclick="closeQuickAdd()">Cancel</button>
+            <button type="submit">Add</button>
+        </div>
+    </form>
+</dialog>
+
+<!-- Manually link two existing people (Link mode) -->
+<dialog id="linkDialog">
+    <form method="dialog" class="dialog-form" onsubmit="event.preventDefault(); submitLinkDialog();">
+        <h3>Link two people</h3>
+        <div class="field-row">
+            <div class="field-col">
+                <label class="field-label" for="linkPersonA">First person</label>
+                <select id="linkPersonA"></select>
             </div>
-        </form>
-    </dialog>
-
-    <!-- Tree settings -->
-    <dialog id="settingsDialog">
-        <div class="dialog-form settings-form">
-            <h3>Settings</h3>
-
-            <section class="settings-section">
-                <h4>Appearance</h4>
-                <label class="settings-label" for="themeSelect">Theme</label>
-                <select id="themeSelect" onchange="applyTheme(this.value)">
-                    <option value="white">White</option>
-                    <option value="black">Black</option>
-                    <option value="tokyo">Tokyo Night</option>
-                    <option value="sand">Sand</option>
-                    <option value="milan">Milan</option>
-                </select>
-                <label class="settings-label" for="fontSizeSelect">Tree text size</label>
-                <select id="fontSizeSelect" onchange="applyFontSize()">
-                    <option value="small">Small</option>
-                    <option value="medium" selected>Medium</option>
-                    <option value="large">Large</option>
-                </select>
-            </section>
-
-            <section class="settings-section">
-                <h4>Dates</h4>
-                <label class="settings-label" for="dateFormatSelect">Date format</label>
-                <select id="dateFormatSelect" onchange="applyDateFormat()">
-                    <option value="dmy">DD/MM/YYYY</option>
-                    <option value="mdy">MM/DD/YYYY</option>
-                    <option value="ymd">YYYY-MM-DD</option>
-                </select>
-            </section>
-
-            <section class="settings-section">
-                <h4>Photo storage</h4>
-                <div class="storage-pills settings-pills">
-                    <button id="pillLocal" class="pill active" onclick="selectStorage('local')">Local disk</button>
-                    <button id="pillS3" class="pill" onclick="selectStorage('s3')">AWS S3</button>
-                    <button id="pillDrive" class="pill" onclick="selectStorage('drive')">Google Drive</button>
-                </div>
-                <p class="settings-note">Photos live in <code>uploads/</code> unless you connect S3 or Google Drive.</p>
-            </section>
-
-            <section class="settings-section">
-                <h4>Backup &amp; data</h4>
-                <div class="settings-buttons">
-                    <button class="btn-secondary" onclick="downloadBackup()">⬇ Download backup</button>
-                    <button class="btn-secondary" onclick="openRestorePicker()">↩ Restore from backup…</button>
-                    <button class="btn-secondary" onclick="exportJSON()">Export raw JSON</button>
-                    <button class="btn-secondary" onclick="showChecklist()">Show getting-started list</button>
-                </div>
-                <p class="settings-note">A backup contains every person and relationship, but not the photo files — keep the <code>uploads/</code> folder next to it.</p>
-            </section>
-
-            <section class="settings-section">
-                <h4>About</h4>
-                <button class="btn-secondary" onclick="checkForUpdates()">⬆ Check for updates</button>
-            </section>
-
-            <div class="dialog-actions">
-                <button type="button" class="btn-secondary" onclick="closeSettingsDialog()">Close</button>
+            <div class="field-col">
+                <label class="field-label" for="linkPersonB">Second person</label>
+                <select id="linkPersonB"></select>
             </div>
         </div>
-    </dialog>
-
-    <!-- App update checker -->
-    <dialog id="updateDialog">
-        <div class="dialog-form">
-            <h3>App Updates</h3>
-            <p id="updateStatus" class="dialog-copy">Checking for the latest release…</p>
-            <div id="updateDetails" class="update-details" style="display:none;"></div>
-            <div class="dialog-actions">
-                <button id="openReleaseBtn" type="button" onclick="openLatestRelease()" style="display:none;">Open Release</button>
-                <button type="button" class="btn-secondary" onclick="closeUpdateDialog()">Close</button>
-            </div>
+        <p id="linkDialogNames" class="dialog-copy"></p>
+        <label class="field-label" for="linkRelationType">Relationship</label>
+        <select id="linkRelationType">
+            <optgroup label="Parent and child">
+                <option value="a-parent-of-b">First person is the biological parent of the second</option>
+                <option value="a-adoptive-parent-of-b">First person is the adoptive parent of the second</option>
+                <option value="a-foster-parent-of-b">First person is the foster parent of the second</option>
+                <option value="a-guardian-of-b">First person is the guardian of the second</option>
+                <option value="a-unknown-parent-of-b">First person is an unknown parent of the second</option>
+                <option value="b-parent-of-a">Second person is the biological parent of the first</option>
+                <option value="b-adoptive-parent-of-a">Second person is the adoptive parent of the first</option>
+            </optgroup>
+            <optgroup label="Partners">
+                <option value="spouse">They are partners / married</option>
+                <option value="spouse-divorced">They are divorced / separated</option>
+            </optgroup>
+            <optgroup label="Siblings">
+                <option value="sibling-full">Full siblings (same parents)</option>
+                <option value="sibling-half">Half siblings (one shared parent)</option>
+                <option value="sibling-step">Step siblings (no shared parent)</option>
+            </optgroup>
+        </select>
+        <div class="dialog-actions">
+            <button type="button" class="btn-secondary" onclick="closeLinkDialog()">Cancel</button>
+            <button type="submit">Link</button>
         </div>
-    </dialog>
+    </form>
+</dialog>
 
-    <!-- Image crop/resize dialog -->
-    <dialog id="imageCropDialog" class="crop-dialog" oncancel="event.preventDefault(); closeImageCropper()">
-        <div class="dialog-form crop-dialog-body">
-            <h3>Crop Photo</h3>
-            <p class="dialog-copy">Drag the image to reposition it. Use zoom to resize. The highlighted box/circle shows what will appear in the family tree.</p>
-            <div class="crop-canvas-wrap">
-                <canvas id="cropCanvas" width="320" height="320" onpointerdown="onCropPointerDown(event)" onpointermove="onCropPointerMove(event)" onpointerup="onCropPointerUp(event)" onpointercancel="onCropPointerUp(event)"></canvas>
+<!-- Tree settings -->
+<dialog id="settingsDialog">
+    <div class="dialog-form settings-form">
+        <h3>Settings</h3>
+
+        <section class="settings-section">
+            <h4>Appearance</h4>
+            <label class="settings-label" for="themeSelect">Theme</label>
+            <select id="themeSelect" onchange="applyTheme(this.value)">
+                <option value="white">White</option>
+                <option value="black">Black</option>
+                <option value="tokyo">Tokyo Night</option>
+                <option value="sand">Sand</option>
+                <option value="milan">Milan</option>
+            </select>
+            <label class="settings-label" for="fontSizeSelect">Tree text size</label>
+            <select id="fontSizeSelect" onchange="applyFontSize()">
+                <option value="small">Small</option>
+                <option value="medium" selected>Medium</option>
+                <option value="large">Large</option>
+            </select>
+        </section>
+
+        <section class="settings-section">
+            <h4>Dates</h4>
+            <label class="settings-label" for="dateFormatSelect">Date format</label>
+            <select id="dateFormatSelect" onchange="applyDateFormat()">
+                <option value="dmy">DD/MM/YYYY</option>
+                <option value="mdy">MM/DD/YYYY</option>
+                <option value="ymd">YYYY-MM-DD</option>
+            </select>
+        </section>
+
+        <section class="settings-section">
+            <h4>Photo storage</h4>
+            <p class="settings-note">Photos stay on this machine in <code>uploads/</code>. The cloud options are optional and only affect new uploads.</p>
+            <div class="storage-pills settings-pills">
+                <button id="pillLocal" class="pill active" onclick="selectStorage('local')">Local disk</button>
+                <button id="pillS3" class="pill" onclick="selectStorage('s3')">AWS S3</button>
+                <button id="pillDrive" class="pill" onclick="selectStorage('drive')">Google Drive</button>
             </div>
-            <label class="settings-label" for="cropZoom">Zoom</label>
-            <input id="cropZoom" type="range" min="100" max="300" value="100" oninput="onCropZoomChange()">
-            <div class="dialog-actions">
-                <button type="button" class="btn-secondary" onclick="closeImageCropper()">Cancel</button>
-                <button type="button" onclick="applyImageCrop()">Use Cropped Photo</button>
+            <p class="settings-note">People, relationships, snapshots and backups are local whichever option is picked.</p>
+        </section>
+
+        <section class="settings-section">
+            <h4>Files &amp; backups</h4>
+            <div id="dataTools"></div>
+        </section>
+
+        <section class="settings-section">
+            <h4>Sharing</h4>
+            <div id="shareTools"></div>
+        </section>
+
+        <section class="settings-section">
+            <h4>Backup &amp; data</h4>
+            <div class="settings-buttons">
+                <button class="btn-secondary" onclick="downloadBackup()">
+                    <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg> Download backup
+                </button>
+                <button class="btn-secondary" onclick="openRestorePicker()">
+                    <svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg> Restore from backup…
+                </button>
+                <button class="btn-secondary" onclick="exportJSON()">Export raw JSON</button>
+                <button class="btn-secondary" onclick="showChecklist()">Show getting-started list</button>
+                <button class="btn-secondary" onclick="reloadTree()">
+                    <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg> Re-arrange and reload
+                </button>
             </div>
+            <p class="settings-note">A backup contains every person and relationship, but not the photo files — keep the <code>uploads/</code> folder next to it.</p>
+        </section>
+
+        <section class="settings-section">
+            <h4>About</h4>
+            <p class="settings-note">This app runs on your own machine. There is no account, no subscription and no analytics — your tree, your photos and your backups stay on this computer unless you export them yourself. Opening the app makes no request to any outside service.</p>
+            <button class="btn-secondary" onclick="checkForUpdates()">
+                <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg> Check for updates
+            </button>
+        </section>
+
+        <div class="dialog-actions">
+            <button type="button" class="btn-secondary" onclick="closeSettingsDialog()">Close</button>
         </div>
-    </dialog>
+    </div>
+</dialog>
 
-    <!-- Photo upload dialog (used when adding a new person's photo isn't via sidebar) -->
-    <dialog id="photoDialog">
-        <form method="dialog" class="dialog-form" onsubmit="event.preventDefault(); submitPhoto();">
-            <h3>Update Photo for <span id="photoDialogName"></span></h3>
-            <div class="dialog-preview">
-                <img id="photoDialogPreview" src="" alt="preview">
-            </div>
-            <input type="file" id="photoDialogInput" accept="image/*" onchange="previewPhoto()">
-            <div class="dialog-actions">
-                <button type="button" class="btn-secondary" onclick="closePhotoDialog()">Cancel</button>
-                <button type="submit">Upload</button>
-            </div>
-        </form>
-    </dialog>
-
-    <!-- AWS S3 integration dialog -->
-    <dialog id="s3Dialog">
-        <div class="dialog-form">
-            <h3>Connect to AWS S3</h3>
-            <p class="dialog-copy">Uses your local AWS credentials (environment variables, <code>~/.aws/credentials</code> profile, or an instance role) to list and choose a bucket for photo storage.</p>
-            <button class="btn-secondary" onclick="browseS3Buckets()">🔍 Browse Buckets</button>
-            <div id="s3Error" class="dialog-error" style="display:none;"></div>
-            <ul id="s3BucketList" class="bucket-list"></ul>
-            <div class="dialog-actions">
-                <button type="button" class="btn-secondary" onclick="closeS3Dialog()">Close</button>
-            </div>
+<!-- App update checker -->
+<dialog id="updateDialog">
+    <div class="dialog-form">
+        <h3>App Updates</h3>
+        <p id="updateStatus" class="dialog-copy">Checking for the latest release…</p>
+        <div id="updateDetails" class="update-details" style="display:none;"></div>
+        <div class="dialog-actions">
+            <button id="openReleaseBtn" type="button" onclick="openLatestRelease()" style="display:none;">
+                <svg class="icon" aria-hidden="true"><use href="#i-external"/></svg> Open release
+            </button>
+            <button type="button" class="btn-secondary" onclick="closeUpdateDialog()">Close</button>
         </div>
-    </dialog>
+    </div>
+</dialog>
 
-    <!-- Google Drive integration dialog -->
-    <dialog id="driveDialog">
-        <div class="dialog-form">
-            <h3>Connect to Google Drive</h3>
-            <p class="dialog-copy">Sign in with Google to store uploaded photos in your Drive.</p>
-            <p id="driveStatus" class="dialog-copy" style="display:none;">✅ Already connected.</p>
-            <button class="btn-google" onclick="connectGoogleDrive()">🔗 Connect with Google</button>
-            <div id="driveError" class="dialog-error" style="display:none;"></div>
-            <div class="dialog-actions">
-                <button type="button" class="btn-secondary" onclick="closeDriveDialog()">Close</button>
-            </div>
+<!-- Image crop/resize dialog -->
+<dialog id="imageCropDialog" class="crop-dialog" oncancel="event.preventDefault(); closeImageCropper()">
+    <div class="dialog-form crop-dialog-body">
+        <h3>Crop Photo</h3>
+        <p class="dialog-copy">Drag the image to reposition it. Use zoom to resize. The highlighted box/circle shows what will appear in the family tree.</p>
+        <div class="crop-canvas-wrap">
+            <canvas id="cropCanvas" width="320" height="320" onpointerdown="onCropPointerDown(event)" onpointermove="onCropPointerMove(event)" onpointerup="onCropPointerUp(event)" onpointercancel="onCropPointerUp(event)"></canvas>
         </div>
-    </dialog>
+        <label class="settings-label" for="cropZoom">Zoom</label>
+        <input id="cropZoom" type="range" min="100" max="300" value="100" oninput="onCropZoomChange()">
+        <div class="dialog-actions">
+            <button type="button" class="btn-secondary" onclick="closeImageCropper()">Cancel</button>
+            <button type="button" onclick="applyImageCrop()">Use cropped photo</button>
+        </div>
+    </div>
+</dialog>
 
-    <!-- Hidden picker used by "Restore from backup" -->
-    <input type="file" id="restoreFileInput" accept="application/json,.json" style="display:none;">
+<!-- Photo upload dialog (used when adding a new person's photo isn't via sidebar) -->
+<dialog id="photoDialog">
+    <form method="dialog" class="dialog-form" onsubmit="event.preventDefault(); submitPhoto();">
+        <h3>Update Photo for <span id="photoDialogName"></span></h3>
+        <div class="dialog-preview">
+            <img id="photoDialogPreview" src="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Ccircle%20cx%3D%2712%27%20cy%3D%279%27%20r%3D%274%27%20fill%3D%27%2393a19e%27%2F%3E%3Cpath%20d%3D%27M4%2021a8%208%200%200%201%2016%200z%27%20fill%3D%27%2393a19e%27%2F%3E%3C%2Fsvg%3E" alt="preview">
+        </div>
+        <input type="file" id="photoDialogInput" accept="image/*" onchange="previewPhoto()">
+        <div class="dialog-actions">
+            <button type="button" class="btn-secondary" onclick="closePhotoDialog()">Cancel</button>
+            <button type="submit">Upload</button>
+        </div>
+    </form>
+</dialog>
 
-    <div id="toast" class="toast"></div>
+<!-- AWS S3 integration dialog -->
+<dialog id="s3Dialog">
+    <div class="dialog-form">
+        <h3>Connect to AWS S3</h3>
+        <p class="dialog-copy">Uses your local AWS credentials (environment variables, <code>~/.aws/credentials</code> profile, or an instance role) to list and choose a bucket for photo storage.</p>
+        <button class="btn-secondary" onclick="browseS3Buckets()">
+            <svg class="icon" aria-hidden="true"><use href="#i-db"/></svg> Browse buckets
+        </button>
+        <div id="s3Error" class="dialog-error" style="display:none;"></div>
+        <ul id="s3BucketList" class="bucket-list"></ul>
+        <div class="dialog-actions">
+            <button type="button" class="btn-secondary" onclick="closeS3Dialog()">Close</button>
+        </div>
+    </div>
+</dialog>
 
-    <script src="/static/app.js"></script>
+<!-- Google Drive integration dialog -->
+<dialog id="driveDialog">
+    <div class="dialog-form">
+        <h3>Connect to Google Drive</h3>
+        <p class="dialog-copy">Sign in with Google to store uploaded photos in your Drive.</p>
+        <p id="driveStatus" class="dialog-copy" style="display:none;">Already connected.</p>
+        <button class="btn-google" onclick="connectGoogleDrive()">
+            <svg class="icon" aria-hidden="true"><use href="#i-cloud"/></svg> Connect with Google
+        </button>
+        <div id="driveError" class="dialog-error" style="display:none;"></div>
+        <div class="dialog-actions">
+            <button type="button" class="btn-secondary" onclick="closeDriveDialog()">Close</button>
+        </div>
+    </div>
+</dialog>
+
+<!-- Hidden picker used by "Restore from backup" -->
+<input type="file" id="restoreFileInput" accept="application/json,.json" style="display:none;">
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script src="/static/app.js"></script>
+<script src="/static/feat-print.js"></script>
+<script src="/static/feat-relations.js"></script>
+<script src="/static/feat-layout.js"></script>
+<script src="/static/feat-timeline.js"></script>
+<script src="/static/feat-data.js"></script>
+<script src="/static/feat-share.js"></script>
+<script src="/static/feat-styles.js"></script>
 </body>
 </html>

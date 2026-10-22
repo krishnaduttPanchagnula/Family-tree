@@ -47,7 +47,9 @@ const CHECKLIST_STEPS = [
     { id: 'export', label: 'Export or share your tree', action: 'Export', run: () => exportImage('png') }
 ];
 
-const placeholderAvatar = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23ccc"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>';
+// Placeholder silhouette for people without a photo. Fully URL-encoded so it
+// survives being dropped into an HTML attribute.
+const placeholderAvatar = 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2393a19e%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%228.5%22%20r%3D%223.6%22%2F%3E%3Cpath%20d%3D%22M5%2020a7%207%200%200%201%2014%200%22%2F%3E%3C%2Fsvg%3E';
 
 function showToast(message, isError) {
     const toast = document.getElementById('toast');
@@ -119,8 +121,8 @@ async function postJson(path, body) {
     return res.status === 204 ? null : res.json().catch(() => null);
 }
 
-function undoRestore(persons, relationships) {
-    return postJson('/api/undo', { persons: persons || [], relationships: relationships || [] });
+function undoRestore(persons, relationships, events) {
+    return postJson('/api/undo', { persons: persons || [], relationships: relationships || [], events: events || [] });
 }
 
 async function performUndo() {
@@ -232,7 +234,44 @@ function toggleLegend() {
     const button = document.getElementById('legendBtn');
     const isOpen = panel.style.display !== 'none';
     panel.style.display = isOpen ? 'none' : 'block';
-    if (button) button.classList.toggle('active', !isOpen);
+    if (button) {
+        button.classList.toggle('active', !isOpen);
+        button.setAttribute('aria-pressed', String(!isOpen));
+    }
+}
+
+// --- Rail menus (Add a person / Export) ---
+// Only one rail menu is open at a time, and both close on an outside click,
+// on Escape, or as soon as an action is chosen.
+function closeMenus() {
+    document.getElementById('exportMenu').classList.remove('open');
+    document.getElementById('addMenu').classList.remove('open');
+    document.getElementById('addBtn').setAttribute('aria-expanded', 'false');
+    document.querySelectorAll('[aria-haspopup="menu"]').forEach(btn => btn.setAttribute('aria-expanded', 'false'));
+}
+
+function toggleAddMenu() {
+    const menu = document.getElementById('addMenu');
+    const button = document.getElementById('addBtn');
+    const willOpen = !menu.classList.contains('open');
+
+    if (willOpen) {
+        // Relative options only make sense with someone selected, so the menu
+        // says who they would be added to instead of failing after the click.
+        const hasSelection = selectedNodeId !== null;
+        const person = hasSelection ? findPerson(selectedNodeId) : null;
+        menu.querySelectorAll('[data-needs-selection]').forEach(item => { item.disabled = !hasSelection; });
+        const hint = document.getElementById('addMenuHint');
+        hint.textContent = hasSelection
+            ? 'Relative to ' + (person ? person.name : 'the selected person')
+            : 'Select someone on the tree to add them as a relative.';
+    }
+
+    closeMenus();
+    if (willOpen) {
+        menu.classList.add('open');
+        button.setAttribute('aria-expanded', 'true');
+    }
 }
 
 function syncCanvasSize() {
@@ -601,6 +640,51 @@ async function loadTree() {
     updateChecklist();
 }
 
+// --- Life events (timeline) ---
+let currentEvents = [];
+
+async function loadEvents() {
+    try {
+        const res = await fetch('/api/events');
+        currentEvents = (await res.json()) || [];
+    } catch (err) {
+        currentEvents = [];
+    }
+    return currentEvents;
+}
+
+// Generation depth for every person: 0 is the earliest ancestor and each step
+// down the tree adds one. Used by the timeline and the printable layouts.
+function computeGenerations() {
+    const idSet = new Set(currentPersons.map(p => p.id));
+    const parents = new Map(currentPersons.map(p => [p.id, []]));
+
+    currentRelationships.forEach(rel => {
+        const edge = parentChildEdge(rel, idSet);
+        if (!edge || !parents.has(edge.child)) return;
+        const list = parents.get(edge.child);
+        if (!list.includes(edge.parent)) list.push(edge.parent);
+    });
+
+    const depth = new Map(currentPersons.map(p => [p.id, 0]));
+    // Longest path from a root. The pass limit keeps a cyclic graph from
+    // looping forever.
+    for (let pass = 0; pass < currentPersons.length; pass++) {
+        let changed = false;
+        currentPersons.forEach(p => {
+            const ps = parents.get(p.id) || [];
+            if (!ps.length) return;
+            const d = Math.max.apply(null, ps.map(id => (depth.get(id) || 0) + 1));
+            if (d > (depth.get(p.id) || 0)) {
+                depth.set(p.id, d);
+                changed = true;
+            }
+        });
+        if (!changed) break;
+    }
+    return depth;
+}
+
 // --- Relation styling helpers ---
 function relationRoleClass(relation) {
     switch (relation) {
@@ -696,6 +780,7 @@ function renderTree() {
         const node = document.createElement('div');
         node.className = 'tree-node ' + roleClass;
         if (p.id === selectedNodeId) node.classList.add('selected');
+        if (pendingLink && pendingLink.idA === p.id) node.classList.add('link-pending');
         node.dataset.id = p.id;
         node.style.left = (p.pos_x || 0) + 'px';
         node.style.top = (p.pos_y || 0) + 'px';
@@ -711,7 +796,7 @@ function renderTree() {
 
         node.innerHTML = `
             <div class="tree-avatar">
-                <img src="${imgSrc}" alt="${escapeAttr(p.name)}">
+                <img src="${escapeAttr(imgSrc)}" alt="${escapeAttr(p.name)}">
             </div>
             <div class="tree-name-display">${escapeHtml(p.name)}</div>
             ${metaLine ? `<div class="tree-node-meta">${escapeHtml(metaLine)}</div>` : ''}
@@ -746,6 +831,8 @@ function drawLines() {
     svg.innerHTML = '';
     svg.classList.toggle('lines-editable', connectMode);
 
+    const rightward = treeStyle.direction === 'right';
+
     currentRelationships.forEach(rel => {
         const p1 = findPerson(rel.person1_id);
         const p2 = findPerson(rel.person2_id);
@@ -773,16 +860,71 @@ function drawLines() {
             svg.appendChild(hitLine);
         }
 
-        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('x1', x1);
-        line.setAttribute('y1', y1);
-        line.setAttribute('x2', x2);
-        line.setAttribute('y2', y2);
-        line.setAttribute('stroke', style.color);
-        line.setAttribute('stroke-width', '2.5');
-        if (style.dash) line.setAttribute('stroke-dasharray', style.dash);
-        svg.appendChild(line);
+        const shape = connectorShape(p1, p2, rightward);
+        const element = document.createElementNS('http://www.w3.org/2000/svg', shape.tag);
+        Object.keys(shape.attributes).forEach(key => {
+            element.setAttribute(key, shape.attributes[key]);
+        });
+        element.setAttribute('stroke', style.color);
+        element.setAttribute('stroke-width', '2.5');
+        if (style.dash) element.setAttribute('stroke-dasharray', style.dash);
+        if (shape.tag === 'path') element.setAttribute('fill', 'none');
+        svg.appendChild(element);
     });
+}
+
+// connectorShape builds the visible line between two cards. Straight keeps
+// the original centre to centre line; elbow and curve leave from the edge
+// of each card so they read as a chart rather than a scribble.
+function connectorShape(p1, p2, rightward) {
+    if (treeStyle.connector === 'straight') {
+        return {
+            tag: 'line',
+            attributes: {
+                x1: (p1.pos_x || 0) + NODE_CENTER_X,
+                y1: (p1.pos_y || 0) + NODE_CENTER_Y,
+                x2: (p2.pos_x || 0) + NODE_CENTER_X,
+                y2: (p2.pos_y || 0) + NODE_CENTER_Y
+            }
+        };
+    }
+
+    const ax = (p1.pos_x || 0) + NODE_W / 2;
+    const ay = (p1.pos_y || 0) + NODE_H;
+    const bx = (p2.pos_x || 0) + NODE_W / 2;
+    const by = (p2.pos_y || 0);
+
+    if (rightward) {
+        const startX = (p1.pos_x || 0) + NODE_W;
+        const startY = (p1.pos_y || 0) + NODE_CENTER_Y;
+        const endX = (p2.pos_x || 0);
+        const endY = (p2.pos_y || 0) + NODE_CENTER_Y;
+        if (treeStyle.connector === 'curve') {
+            const mid = (startX + endX) / 2;
+            return {
+                tag: 'path',
+                attributes: { d: `M ${startX} ${startY} C ${mid} ${startY}, ${mid} ${endY}, ${endX} ${endY}` }
+            };
+        }
+        const mid = (startX + endX) / 2;
+        return {
+            tag: 'path',
+            attributes: { d: `M ${startX} ${startY} L ${mid} ${startY} L ${mid} ${endY} L ${endX} ${endY}` }
+        };
+    }
+
+    if (treeStyle.connector === 'curve') {
+        const mid = (ay + by) / 2;
+        return {
+            tag: 'path',
+            attributes: { d: `M ${ax} ${ay} C ${ax} ${mid}, ${bx} ${mid}, ${bx} ${by}` }
+        };
+    }
+    const mid = (ay + by) / 2;
+    return {
+        tag: 'path',
+        attributes: { d: `M ${ax} ${ay} L ${ax} ${mid} L ${bx} ${mid} L ${bx} ${by}` }
+    };
 }
 
 async function removeConnection(relId, name1, name2) {
@@ -1106,6 +1248,14 @@ async function resetTreeLayout() {
         danger: false
     });
     if (!ok) return;
+    await applyTreeLayout();
+}
+
+// applyTreeLayout puts everyone into generations and saves the new positions.
+// It can be undone, and it is the same work whether it was asked for from
+// the layout panel or from a reload.
+async function applyTreeLayout() {
+    if (!currentPersons.length) return showToast('Nothing to arrange yet', true);
 
     const snapshot = currentPersons.map(p => ({ id: p.id, pos_x: p.pos_x || 0, pos_y: p.pos_y || 0 }));
 
@@ -1116,6 +1266,15 @@ async function resetTreeLayout() {
         p.pos_x = pos.x;
         p.pos_y = pos.y;
     });
+
+    // When the tree runs left to right, the generations are transposed.
+    if (treeStyle.direction === 'right') {
+        currentPersons.forEach(p => {
+            const x = p.pos_x || 0;
+            p.pos_x = p.pos_y || 0;
+            p.pos_y = x;
+        });
+    }
 
     expandCanvasToFitTree(false);
     renderTree();
@@ -1254,7 +1413,7 @@ async function onNodeMouseUp() {
 
     if (moved) {
         const p = findPerson(id);
-        if (p) {
+        if (p && !isReadOnlyView()) {
             try {
                 await fetch(`/api/persons/${id}`, {
                     method: 'PATCH',
@@ -1333,6 +1492,7 @@ function populateSidebar(p) {
 
     renderConnections(p);
     renderLineage(p);
+    if (typeof window.renderEventsPanel === 'function') window.renderEventsPanel();
     clearDirty();
 }
 
@@ -1340,11 +1500,13 @@ function markDirty() {
     if (sidebarDirty) return;
     sidebarDirty = true;
     document.getElementById('dirtyIndicator').hidden = false;
+    document.getElementById('savePersonBtn').disabled = false;
 }
 
 function clearDirty() {
     sidebarDirty = false;
     document.getElementById('dirtyIndicator').hidden = true;
+    document.getElementById('savePersonBtn').disabled = true;
 }
 
 // --- Connections list for the selected person ---
@@ -1405,7 +1567,7 @@ function renderLineage(p) {
         const person = findPerson(id);
         if (!person) return '';
         const current = id === p.id ? ' current' : '';
-        const sep = index ? '<span class="crumb-sep">›</span>' : '';
+        const sep = index ? '<span class="crumb-sep" aria-hidden="true"><svg class="icon"><use href="#i-chevron-right"/></svg></span>' : '';
         return `${sep}<button class="crumb${current}" onclick="jumpToPerson(${id})" title="${escapeAttr(person.name)}">${escapeHtml(person.name)}</button>`;
     }).join('');
 }
@@ -1415,10 +1577,12 @@ function switchTab(tab) {
     document.querySelectorAll('.tab-panel').forEach(panel => {
         panel.style.display = panel.dataset.panel === tab ? 'block' : 'none';
     });
+    if (tab === 'events' && typeof window.renderEventsPanel === 'function') window.renderEventsPanel();
 }
 
 async function saveSelectedPerson() {
     if (selectedNodeId === null) return;
+    if (isReadOnlyView()) return showToast('This tree is shared read-only', true);
     const body = {
         name: document.getElementById('fieldName').value.trim(),
         dob: document.getElementById('fieldDob').value,
@@ -1446,6 +1610,7 @@ async function saveSelectedPerson() {
 
 async function uploadSelectedPersonPhoto(file) {
     if (selectedNodeId === null || !file) return;
+    if (isReadOnlyView()) return showToast('This tree is shared read-only', true);
 
     const formData = new FormData();
     formData.append('pic', file);
@@ -1462,6 +1627,7 @@ async function uploadSelectedPersonPhoto(file) {
 
 async function deleteSelectedPerson() {
     if (selectedNodeId === null) return;
+    if (isReadOnlyView()) return showToast('This tree is shared read-only', true);
     const p = findPerson(selectedNodeId);
     if (!p) return;
     const name = p.name || 'this person';
@@ -1479,6 +1645,9 @@ async function deleteSelectedPerson() {
 
     const personSnapshot = Object.assign({}, p);
     const linkSnapshot = links.map(rel => Object.assign({}, rel));
+    const eventSnapshot = currentEvents
+        .filter(ev => ev.person_id === p.id)
+        .map(ev => Object.assign({}, ev));
 
     try {
         const res = await fetch(`/api/persons/${selectedNodeId}`, { method: 'DELETE' });
@@ -1487,8 +1656,9 @@ async function deleteSelectedPerson() {
         pushUndo({
             label: `deleting ${name}`,
             run: async () => {
-                await undoRestore([personSnapshot], linkSnapshot);
+                await undoRestore([personSnapshot], linkSnapshot, eventSnapshot);
                 selectedNodeId = personSnapshot.id;
+                await loadEvents();
                 await loadTree();
             }
         });
@@ -1502,34 +1672,102 @@ async function deleteSelectedPerson() {
     }
 }
 
+// A shared read-only view is a copy of the tree on somebody else's screen:
+// nothing here may be written back.
+function isReadOnlyView() {
+    return document.body.classList.contains('ft-readonly');
+}
+
 // --- Sidebar collapse/expand ---
-function toggleSidebar() {
-    sidebarCollapsed = !sidebarCollapsed;
+// The panel is a fixed column on wide screens and a drawer over the canvas on
+// narrow ones, so the collapsed state is re-synced whenever the layout
+// crosses that breakpoint.
+let narrowViewport = false;
+
+function applySidebarState() {
     document.getElementById('sidebar').classList.toggle('collapsed', sidebarCollapsed);
     document.getElementById('sidebarExpandBtn').style.display = sidebarCollapsed ? 'block' : 'none';
 }
 
+function toggleSidebar() {
+    sidebarCollapsed = !sidebarCollapsed;
+    applySidebarState();
+}
+
+function syncSidebarToViewport() {
+    const narrow = window.innerWidth <= 820;
+    if (narrow === narrowViewport) return;
+    narrowViewport = narrow;
+    sidebarCollapsed = narrow;
+    applySidebarState();
+}
+
 // --- Edit Connections mode ---
-function toggleConnectMode() {
-    connectMode = !connectMode;
-    document.getElementById('connectBtn').classList.toggle('active', connectMode);
+function setConnectMode(on) {
+    connectMode = on;
+    const button = document.getElementById('connectBtn');
+    button.classList.toggle('active', connectMode);
+    button.setAttribute('aria-pressed', String(connectMode));
     document.getElementById('connectHint').style.display = connectMode ? 'flex' : 'none';
     document.getElementById('treeCanvas').classList.toggle('connect-mode', connectMode);
+    if (!connectMode) pendingLink = null;  // leaving the mode drops the pick
+    updateConnectHint();
     renderTree();
+}
+
+// The Link button: it starts the mode, cancels it, and — when one person is
+// already picked — opens the link dialog so the second person can be chosen
+// there instead of on the canvas.
+function onLinkButtonClick() {
+    if (!connectMode) {
+        setConnectMode(true);
+        return;
+    }
+    if (pendingLink) {
+        const first = pendingLink.idA;
+        pendingLink = null;
+        setConnectMode(false);
+        openLinkDialog(first, null);
+        return;
+    }
+    setConnectMode(false);
+}
+
+function updateConnectHint() {
+    const hint = document.getElementById('connectHint');
+    if (!hint) return;
+    const text = hint.querySelector('span');
+    if (!text) return;
+    if (pendingLink) {
+        const person = findPerson(pendingLink.idA);
+        text.innerHTML = `<strong>${escapeHtml(person ? person.name : 'This person')}</strong> is picked — now click the person to link them with, or press Link to choose from a list.`;
+    } else {
+        text.innerHTML = 'Click a person, then a second person to link them. Click an existing line to remove it. <kbd>Esc</kbd> exits.';
+    }
+}
+
+function toggleConnectMode() {
+    setConnectMode(!connectMode);
 }
 
 function handleConnectClick(id) {
     if (!pendingLink) {
         pendingLink = { idA: id };
+        updateConnectHint();
+        renderTree();
         showToast('Now click a second person to connect');
         return;
     }
     if (pendingLink.idA === id) {
         pendingLink = null;
+        updateConnectHint();
+        renderTree();
         return;
     }
-    openLinkDialog(pendingLink.idA, id);
+    const first = pendingLink.idA;
     pendingLink = null;
+    updateConnectHint();
+    openLinkDialog(first, id);
 }
 
 // Directional map for the manual "Connect People" dialog: the option value in
@@ -1583,13 +1821,38 @@ function linkError(person1, person2, relation) {
     return null;
 }
 
+// openLinkDialog opens the link form. The two people can be picked in the
+// dialog, which is how the flow is completed when clicking two cards on the
+// canvas is awkward.
 function openLinkDialog(idA, idB) {
-    pendingLink = { idA, idB };
-    const a = findPerson(idA), b = findPerson(idB);
-    document.getElementById('linkDialogNames').innerHTML =
-        `<strong>${escapeHtml(a.name)}</strong> (first) &nbsp;&harr;&nbsp; <strong>${escapeHtml(b.name)}</strong> (second)`;
+    pendingLink = { idA, idB: idB || null };
+
+    const options = currentPersons
+        .map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`)
+        .join('');
+    const selectA = document.getElementById('linkPersonA');
+    const selectB = document.getElementById('linkPersonB');
+    selectA.innerHTML = '<option value="">Choose a person…</option>' + options;
+    selectB.innerHTML = '<option value="">Choose a person…</option>' + options;
+    if (idA) selectA.value = String(idA);
+    if (idB) selectB.value = String(idB);
+
     document.getElementById('linkRelationType').value = 'spouse';
+    updateLinkDialogNames();
     document.getElementById('linkDialog').showModal();
+}
+
+// The line under the pickers spells out which way the relationship points,
+// because the direction decides what "parent of" means.
+function updateLinkDialogNames() {
+    const a = findPerson(Number(document.getElementById('linkPersonA').value));
+    const b = findPerson(Number(document.getElementById('linkPersonB').value));
+    const names = document.getElementById('linkDialogNames');
+    if (a && b) {
+        names.textContent = `${a.name} (first) ↔ ${b.name} (second)`;
+    } else {
+        names.textContent = 'Choose two people.';
+    }
 }
 
 function closeLinkDialog() {
@@ -1598,8 +1861,12 @@ function closeLinkDialog() {
 }
 
 async function submitLinkDialog() {
-    if (!pendingLink || !pendingLink.idB) return;
-    const { idA, idB } = pendingLink;
+    if (!pendingLink) return;
+    const idA = Number(document.getElementById('linkPersonA').value);
+    const idB = Number(document.getElementById('linkPersonB').value);
+    if (!idA || !idB) return showToast('Choose two people', true);
+    if (idA === idB) return showToast('Pick two different people', true);
+    pendingLink = { idA, idB };
     const choice = document.getElementById('linkRelationType').value;
     const mapping = LINK_CHOICES[choice] || { relation: choice, first: 'symmetric' };
 
@@ -1616,12 +1883,12 @@ async function submitLinkDialog() {
             body: JSON.stringify({ person1_id: person1, person2_id: person2, relation: mapping.relation })
         });
         if (!res.ok) throw new Error(await res.text());
-        showToast('Connected');
+        showToast('Linked');
         document.getElementById('linkDialog').close();
         pendingLink = null;
         loadTree();
     } catch (err) {
-        showToast('Failed to connect: ' + err.message, true);
+        showToast('Failed to link: ' + err.message, true);
     }
 }
 
@@ -1629,6 +1896,7 @@ async function submitLinkDialog() {
 // Sidebar buttons always act relative to the currently selected node; only
 // the "root" (first-ever person) case has no anchor.
 function openQuickAdd(anchorIdArg, type) {
+    closeMenus();
     const anchorId = type === 'root' ? null : selectedNodeId;
     if (type !== 'root' && anchorId === null) {
         return showToast('Select a person first', true);
@@ -1848,7 +2116,13 @@ function buildTreeSVG() {
 }
 
 function toggleExportMenu() {
-    document.getElementById('exportMenu').classList.toggle('open');
+    const menu = document.getElementById('exportMenu');
+    const willOpen = !menu.classList.contains('open');
+    closeMenus();
+    if (willOpen) {
+        menu.classList.add('open');
+        menu.previousElementSibling.setAttribute('aria-expanded', 'true');
+    }
 }
 
 function downloadBlob(blob, filename) {
@@ -1861,7 +2135,7 @@ function downloadBlob(blob, filename) {
 }
 
 async function exportImage(format) {
-    document.getElementById('exportMenu').classList.remove('open');
+    closeMenus();
     if (!currentPersons.length) return showToast('Nothing to export yet', true);
 
     const { svg, width, height } = buildTreeSVG();
@@ -1912,7 +2186,7 @@ function noteExported() {
 
 function exportJSON() {
     if (!currentPersons.length) return showToast('Nothing to export yet', true);
-    const data = { persons: currentPersons, relationships: currentRelationships };
+    const data = { persons: currentPersons, relationships: currentRelationships, events: currentEvents };
     downloadBlob(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), 'family-tree.json');
     noteExported();
     showToast('Tree data exported as JSON');
@@ -2064,7 +2338,7 @@ function renderChecklist() {
         const action = done ? '' : `<button class="checklist-action" onclick="runChecklistStep('${step.id}')">${step.action}</button>`;
         return `
             <li class="checklist-item${done ? ' done' : ''}">
-                <span class="checklist-mark" aria-hidden="true">✓</span>
+                <span class="checklist-mark" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>
                 <span class="checklist-label">${step.label}</span>
                 ${action}
             </li>`;
@@ -2074,7 +2348,7 @@ function renderChecklist() {
     const finished = doneCount === CHECKLIST_STEPS.length;
 
     document.getElementById('checklistItems').innerHTML = items +
-        (finished ? '<li class="checklist-all-done">🎉 All done — your tree is ready to share.</li>' : '');
+        (finished ? '<li class="checklist-all-done"><svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg> All done — your tree is ready to share.</li>' : '');
     document.getElementById('checklistProgress').textContent = `${doneCount} / ${CHECKLIST_STEPS.length}`;
     panel.style.display = 'block';
 }
@@ -2169,7 +2443,108 @@ function openLatestRelease() {
     if (latestReleaseUrl) window.open(latestReleaseUrl, '_blank', 'noopener');
 }
 
+// --- Tree look ---
+// The shape of the tree: which way the generations run, how the cards are
+// joined, and whether the cards are rounded or square. The look is kept in
+// localStorage; the direction also decides how the tree is laid out.
+const TREE_STYLE_KEY = 'familytree.treeStyle';
+
+let treeStyle = { direction: 'down', connector: 'straight', card: 'rounded' };
+
+function loadTreeStyle() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(TREE_STYLE_KEY) || 'null');
+        if (saved && typeof saved === 'object') {
+            treeStyle = {
+                direction: saved.direction === 'right' ? 'right' : 'down',
+                connector: ['straight', 'elbow', 'curve'].includes(saved.connector) ? saved.connector : 'straight',
+                card: saved.card === 'square' ? 'square' : 'rounded'
+            };
+        }
+    } catch (err) {
+        // A broken value just means the defaults.
+    }
+    applyTreeStyleClasses();
+}
+
+// getTreeStyle lets the styles panel read the current look.
+function getTreeStyle() {
+    return { direction: treeStyle.direction, connector: treeStyle.connector, card: treeStyle.card };
+}
+
+function applyTreeStyleClasses() {    const canvas = document.getElementById('treeCanvas');
+    if (!canvas) return;
+    canvas.classList.toggle('style-direction-right', treeStyle.direction === 'right');
+    canvas.classList.toggle('style-cards-square', treeStyle.card === 'square');
+    canvas.classList.toggle('style-connector-elbow', treeStyle.connector === 'elbow');
+    canvas.classList.toggle('style-connector-curve', treeStyle.connector === 'curve');
+}
+
+// The look can change without moving anybody. The direction does move
+// people, so it is applied by transposing the tree: generations that ran
+// downwards now run to the right.
+function setTreeStyle(style) {
+    const next = {
+        direction: style.direction === 'right' ? 'right' : 'down',
+        connector: ['straight', 'elbow', 'curve'].includes(style.connector) ? style.connector : 'straight',
+        card: style.card === 'square' ? 'square' : 'rounded'
+    };
+    const directionChanged = next.direction !== treeStyle.direction;
+    treeStyle = next;
+    localStorage.setItem(TREE_STYLE_KEY, JSON.stringify(treeStyle));
+    applyTreeStyleClasses();
+    if (directionChanged) transposeTree();
+    else renderTree();
+}
+
+function transposeTree() {
+    const snapshot = currentPersons.map(p => ({ id: p.id, pos_x: p.pos_x || 0, pos_y: p.pos_y || 0 }));
+    currentPersons.forEach(p => {
+        const x = p.pos_x || 0;
+        p.pos_x = p.pos_y || 0;
+        p.pos_y = x;
+    });
+
+    pushUndo({
+        label: 'the tree direction',
+        run: async () => {
+            await Promise.all(snapshot.map(point => fetch(`/api/persons/${point.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pos_x: point.pos_x, pos_y: point.pos_y })
+            }).then(res => { if (!res.ok) throw new Error('could not restore a position'); })));
+            await loadTree();
+            centerTree();
+        }
+    });
+
+    currentPersons.forEach(persistPersonPosition);
+    renderTree();
+    centerTree();
+    showToast(treeStyle.direction === 'right' ? 'Tree now runs left to right' : 'Tree now runs top to bottom');
+}
+
 // --- Tree settings ---
+// Reloading puts the tree back into a proper shape: the data comes from disk
+// and everyone is arranged into generations again, so a tree that was dragged
+// into a mess snaps back. It can be undone.
+async function reloadTree() {
+    closeSettingsDialog();
+    if (!currentPersons.length) {
+        await loadTree();
+        return showToast('Reloaded from disk');
+    }
+    const ok = await showConfirm({
+        title: 'Re-arrange the tree?',
+        message: 'Everyone is put back into parent-to-child generations. Manual positions are replaced — you can undo it with Ctrl+Z.',
+        confirmLabel: 'Re-arrange',
+        danger: false
+    });
+    if (!ok) return;
+    await loadTree();
+    await applyTreeLayout();
+}
+
 function openSettingsDialog() {
     document.getElementById('settingsDialog').showModal();
 }
@@ -2314,9 +2689,15 @@ window.addEventListener('message', async (event) => {
 });
 
 window.onload = async () => {
+    loadTreeStyle();
     applyTheme(localStorage.getItem('familytree.theme') || 'white');
     applyZoom();
     updateUndoUI();
+
+    // On a narrow screen the detail panel is a drawer over the canvas, so it
+    // starts closed and the tree gets the whole viewport.
+    syncSidebarToViewport();
+    window.addEventListener('resize', syncSidebarToViewport);
 
     const canvas = document.getElementById('treeCanvas');
     canvas.addEventListener('wheel', onCanvasWheel, { passive: false });
@@ -2324,9 +2705,7 @@ window.onload = async () => {
     canvas.classList.add('font-medium');
 
     document.addEventListener('click', (e) => {
-        if (!e.target.closest('.dropdown')) {
-            document.getElementById('exportMenu').classList.remove('open');
-        }
+        if (!e.target.closest('.dropdown')) closeMenus();
         if (!e.target.closest('.search-box')) closeSearchResults();
     });
 
@@ -2335,6 +2714,7 @@ window.onload = async () => {
     wireShortcuts();
     wireDirtyTracking();
     wireRestorePicker();
+    wireLinkDialog();
     renderChecklist();
 
     loadTree();
@@ -2375,8 +2755,14 @@ function wireRestorePicker() {
     input.addEventListener('change', () => handleRestoreFileChosen(input));
 }
 
-function wireDirtyTracking() {
-    ['fieldName', 'fieldDob', 'fieldDod', 'fieldBirthCountry', 'fieldProfession', 'fieldFacts']
+function wireLinkDialog() {
+    ['linkPersonA', 'linkPersonB'].forEach(id => {
+        const select = document.getElementById(id);
+        if (select) select.addEventListener('change', updateLinkDialogNames);
+    });
+}
+
+function wireDirtyTracking() {    ['fieldName', 'fieldDob', 'fieldDod', 'fieldBirthCountry', 'fieldProfession', 'fieldFacts']
         .forEach(id => document.getElementById(id).addEventListener('input', markDirty));
 }
 
@@ -2407,6 +2793,7 @@ function wireShortcuts() {
         if (e.key === 'Escape') {
             if (document.activeElement === document.getElementById('searchInput')) return;
             if (document.getElementById('searchResults').hidden === false) return;
+            if (document.querySelector('.dropdown-menu.open')) { closeMenus(); return; }
             if (connectMode) { toggleConnectMode(); return; }
             if (selectedNodeId !== null) clearSelection();
         }

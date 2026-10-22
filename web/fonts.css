@@ -1,0 +1,18 @@
+/* Self-hosted fonts, so the app makes no request to anyone when it runs.
+   Inter and Source Serif 4 are licensed under the SIL Open Font License 1.1. */
+
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url('/static/fonts/inter-400-700.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Source Serif 4';
+    font-style: normal;
+    font-weight: 600 700;
+    font-display: swap;
+    src: url('/static/fonts/source-serif-4-600-700.woff2') format('woff2');
+}
