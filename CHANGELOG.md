@@ -3,6 +3,84 @@
 All notable changes to Family Tree Builder are recorded here. Each release
 section is used verbatim as the GitHub release notes.
 
+## v0.4.0
+
+A family tree is more than a chart. This release adds the evidence behind the
+facts, the tools to repair and print the tree, and a set of ways to look at
+it — still entirely on your own machine.
+
+### Sources and evidence
+
+- **A source list for every person**: a census, a birth or death certificate,
+  a marriage record, a gravestone photograph, an interview, a memory, a story.
+  Each one keeps a kind, a title, the full citation, a date, a link and a
+  note.
+- **A source can point at one life event** as well as at the person, so the
+  evidence for a marriage sits with the marriage.
+- Sources are part of every **backup, snapshot and restore** from now on.
+
+### Repairing the tree
+
+- **Check my tree** finds what is wrong: two people who look like the same
+  person, somebody born after they died, a date in the future, somebody with
+  no connections, a branch that is not joined to the rest, and people with no
+  dates, no place or no photo. Every finding names the people it is about and
+  takes you straight to them.
+- **Merge two people** into one record: a field-by-field preview where you
+  choose whose name, dates, place, profession and photo to keep, the links,
+  events and sources that move across, and a confirmation by typing the name.
+  A **snapshot is written first**, so it can be restored.
+- **Start fresh** empties the tree in one action, after writing a snapshot
+  and after you type `DELETE`. The photos can be kept or removed with it.
+
+### Photos and files
+
+- **A photo manager** lists every file in the uploads folder, says which
+  person or life event uses it, and flags the ones **nobody uses** — the
+  leftovers a family tree collects over the years. Unused files can be removed
+  in one go, and a file in use is never deleted behind your back.
+- **Files on life events**: a photograph or a PDF can be attached to any
+  event, so a wedding photo belongs to the wedding.
+
+### Looking at the tree
+
+- **This month in the family**: the birthdays, the anniversaries and the days
+  worth remembering, with the people a click away.
+- **Search filters**: narrow the search by living or deceased, with or without
+  a photo, by decade of birth, and by the branch of the tree around the
+  person you selected. The filters are remembered.
+- **Household layout**: partners and their children grouped as households
+  instead of as generations. Undoable with `Ctrl+Z`.
+- **Family lines**: the separate branches of the family — a maternal side, a
+  paternal side — each in its own named column.
+- **Chart options**: the weight of the connectors, one colour for every line
+  or the colour of the relation, and a **generation limit** that shows only
+  the people within a few generations of the selected one.
+- The **family timeline** can be limited to a stretch of years and grouped by
+  generation instead of by year.
+
+### Printing
+
+- **Reports**: ancestors, descendants, the missing information and the
+  sources, as a document with a title, a generation per section, the events
+  and the citations of every person. A4 or Letter, portrait or landscape, then
+  the browser's own print dialog.
+- **A blank family tree worksheet**: an empty pyramid of boxes to fill in by
+  hand, for a school project or a family reunion. It needs no data at all.
+
+### Importing
+
+- A GEDCOM import now says **who was already in the tree**: the people it
+  matched by name and birth date are reported, and the import can be repeated
+  as a separate copy when you want that.
+
+### Under the hood
+
+- One **Tools launcher** on the rail holds the new tools, so the rail stays
+  short.
+- The backup format carries sources and attached files, so restoring a backup
+  brings the evidence back with it.
+
 ## v0.3.0
 
 A local-first release: a redesigned interface, and a set of features that keep

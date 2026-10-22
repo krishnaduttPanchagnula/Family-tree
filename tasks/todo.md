@@ -9,38 +9,39 @@ Legend: `[ ]` todo · `[x]` done · `[~]` in progress
 - [x] Module conventions + 15 specs written.
 - [x] Tools launcher (`feat-tools`) and central hooks in `app.js`
       (person panel, search filter, visible persons, connector width/colour).
+- [x] `feat-common` helpers shared by the modules.
 
-## Wave 1 — parallel
+## Wave 1
 
-- [ ] `sources` — table, CRUD API, person tab
-- [ ] `person-merge` — snapshot-first merge, fields preview, confirm by name
-- [ ] `photo-manager` — scan uploads, usage, traversal-safe delete
-- [ ] `search-filters` — status/photo/decade/generation, persisted
-- [ ] `worksheet` — printable blank tree
-- [ ] `household-view` — partner + children blocks, undoable
-- [ ] `multi-tree` — named family lines in columns, undoable
-- [ ] `export-wipe` — snapshot, typed confirm, optional photo delete
-- [ ] Integrate wave 1 (routes, tags, `make check`, curl smoke, commit)
+- [x] `sources` — table, CRUD API, person tab
+- [x] `person-merge` — snapshot-first merge, fields preview, confirm by name
+- [x] `photo-manager` — scan uploads, usage, traversal-safe delete
+- [x] `search-filters` — status/photo/decade/generation, persisted
+- [x] `worksheet` — printable blank tree
+- [x] `household-view` — partner + children blocks, undoable
+- [x] `multi-tree` — named family lines in columns, undoable
+- [x] `export-wipe` — snapshot, typed confirm, optional photo delete
+- [x] Integrate wave 1 (routes, tags, `make check`, curl smoke, commit)
 
-## Wave 2 — parallel
+## Wave 2
 
-- [ ] `tree-health` — findings engine + panel, merge action
-- [ ] `calendar` — birthdays/anniversaries/on-this-day
-- [ ] `event-media` — files on events
-- [ ] `chart-options` — thickness, monochrome, generation limit
-- [ ] `timeline-range` — range presets + generation grouping
-- [ ] Integrate wave 2
+- [x] `tree-health` — findings engine + panel, merge action
+- [x] `calendar` — birthdays/anniversaries/on-this-day
+- [x] `event-media` — files on events
+- [x] `chart-options` — thickness, monochrome, generation limit
+- [x] `timeline-range` — range presets + generation grouping
+- [x] Integrate wave 2
 
-## Wave 3 — parallel
+## Wave 3
 
-- [ ] `reports` — ancestor/descendant/missing/sources, printable
-- [ ] `duplicate-import` — detect, skip, override
-- [ ] Integrate wave 3
+- [x] `reports` — ancestor/descendant/missing/sources, printable
+- [x] `duplicate-import` — detect, skip, override
+- [x] Integrate wave 3
 
 ## Release
 
-- [ ] Full `make check`, JS syntax pass, seeded-tree smoke test
-- [ ] `CHANGELOG.md` `## v0.4.0` with every feature
-- [ ] `README.md` updated (tools, endpoints, limitations)
+- [x] Full `make check`, JS syntax pass, seeded-tree smoke test
+- [x] `CHANGELOG.md` `## v0.4.0` with every feature
+- [x] `README.md` updated (tools, endpoints, limitations)
 - [ ] Commit, tag `v0.4.0`, push, watch the release workflow
 - [ ] Verify assets + release notes

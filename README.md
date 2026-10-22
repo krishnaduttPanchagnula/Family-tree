@@ -13,6 +13,17 @@ see [`competitor-research.md`](competitor-research.md).
 - One **Add** button in the canvas tool rail is the single place to add a person, a parent, a partner, a sibling or a child
 - Canvas tool rail grouping zoom, fit, auto-layout, centre, link, legend and export by purpose
 - Life events per person (marriage, residence, education, immigration…) with a family timeline
+- Sources per person and per event: the census, certificate, photograph, interview or story behind a fact
+- "Check my tree": duplicates, impossible dates, unlinked people, missing dates, places and photos
+- Merge two people into one record, field by field, with a snapshot written first
+- A photo manager that lists every file on disk, who uses it, and what nobody uses
+- Files (photo or PDF) attached to a life event
+- This month in the family: birthdays, anniversaries and the days worth remembering
+- Search filters for living or deceased, with or without a photo, by decade, and by branch
+- Household layout (partners and their children grouped) and family lines in separate columns
+- Chart options: connector weight, one colour or the colour of the relation, and a generation limit
+- Printable reports: ancestors, descendants, missing information and sources
+- A blank family tree worksheet to fill in by hand
 - Relationship finder: how two people are related, with the path between them
 - Layout modes: ancestors above, compact, fan, or centred on one person
 - Tree styles: top-to-bottom or left-to-right, straight / elbow / curved
@@ -95,7 +106,21 @@ is loaded from `index.html`:
 | `feat-timeline` | Life events per person and the family-wide timeline |
 | `feat-data` | GEDCOM import/export, full backup with photos, local snapshots |
 | `feat-share` | Read-only link and kiosk mode |
-| `feat-styles` | Tree look: direction, connections and card shape |
+| `feat-styles` | Tree look: direction, connections, card shape, connector weight and generation limit |
+| `feat-tools` | The launcher that holds the new tools |
+| `feat-common` | The small helpers the feature modules share |
+| `feat-sources` | The sources (the evidence) of a person and of an event |
+| `feat-person-merge` | Merging two people into one record |
+| `feat-event-media` | Files attached to a life event |
+| `feat-tree-health` | "Check my tree" |
+| `feat-photo-manager` | The files in the uploads folder and who uses them |
+| `feat-export-wipe` | Starting fresh: backup, then empty the tree |
+| `feat-calendar` | This month in the family |
+| `feat-reports` | The printable reports |
+| `feat-search-filters` | The filters on the search |
+| `feat-worksheet` | The blank family tree worksheet |
+| `feat-household-view` | The household layout |
+| `feat-multi-tree` | The family lines |
 
 ### API endpoints
 
@@ -118,6 +143,16 @@ is loaded from `index.html`:
 | `POST` | `/api/gedcom/import` | Import a GEDCOM file |
 | `GET` | `/api/export.csv` | Export people or relationships as CSV |
 | `GET`, `POST`, `DELETE` | `/api/share` | Create, inspect or stop the read-only link |
+| `GET`, `POST` | `/api/sources` | List the sources of a person or an event / add one |
+| `PATCH`, `DELETE` | `/api/sources/{id}` | Edit / remove a source |
+| `POST` | `/api/persons/merge` | Merge two people into one record |
+| `GET` | `/api/tree-health` | What is missing, impossible or duplicated |
+| `GET`, `DELETE` | `/api/photos` | List the files in the uploads folder / remove one |
+| `GET`, `POST` | `/api/event-media` | List the files of an event / attach one |
+| `PATCH`, `DELETE` | `/api/event-media/{id}` | Edit the caption / remove a file |
+| `GET` | `/api/calendar?month=YYYY-MM` | The birthdays, anniversaries and events of a month |
+| `GET` | `/api/reports/{kind}` | A report: ancestor, descendant, missing or sources |
+| `POST` | `/api/wipe` | Empty the tree, after a snapshot and a typed `DELETE` |
 
 ## Run locally
 
@@ -316,7 +351,8 @@ The UI supports common family links plus richer subtypes for real families:
 - Guardian — done
 - Divorced/separated partner — done
 - Unknown parent — done
-- Multiple families/households
+- Multiple families/households — done in the layout (the household layout
+  groups a partner and their children)
 
 ### Search and quick navigation — mostly done
 
@@ -333,22 +369,23 @@ Life events (marriage, divorce, residence, education, occupation,
 immigration) are stored per person and shown as a timeline in the sidebar,
 with a family-wide view grouped by year and generation.
 
-### Person detail pages
+### Person detail pages — mostly done
 
 A focused person profile could include:
 
-- Full biography
-- Gallery of photos
-- Documents and records
-- Sources/citations
-- Notes from relatives
-- Relationship summary
+- Full biography — done (the Bio tab)
+- Gallery of photos — done (the Photo tab)
+- Documents and records — done (the Files tab: files attached to a life event)
+- Sources/citations — done (the Sources tab)
+- Notes from relatives — not yet
+- Relationship summary — done (the Family tab)
 
 ### Import support
 
 To help users bring existing family data:
 
-- GEDCOM import/export — done
+- GEDCOM import/export — done, and an import now reports who was already in
+  the tree
 - CSV import — export is done (`/api/export.csv`), import is not
 - JSON restore from exported data — done
 
@@ -375,6 +412,9 @@ Important for user trust:
 - Warning before deleting people with many relationships — done (confirm dialog shows the impact)
 - Undo for destructive person and relationship actions — done (life events are
   restored with the person, but deleting an event itself is not undoable)
+- A snapshot before a merge or a wipe — done
+- Check the tree for missing, impossible or duplicated data — done
+- Merge two people into one record — done
 
 ### Accessibility and mobile improvements
 
