@@ -33,9 +33,13 @@ jobs:
       - name: Install cross-compilers
         run: |
           sudo apt-get update -o Acquire::Retries=5 -o Acquire::http::Timeout=30
+          # The cross libc headers are needed too: without them the CGO build
+          # for linux/arm64 fails on a missing bits/libc-header-start.h.
           sudo apt-get install -y --no-install-recommends \
             gcc-aarch64-linux-gnu \
-            mingw-w64
+            libc6-dev-arm64-cross \
+            gcc-mingw-w64-x86-64 \
+            binutils-mingw-w64-x86-64
 
       - name: Test
         run: go test ./...
