@@ -770,9 +770,15 @@ function renderTree() {
     const nodesLayer = document.getElementById('treeNodes');
     const empty = document.getElementById('canvasEmpty');
     nodesLayer.innerHTML = '';
-    empty.style.display = currentPersons.length ? 'none' : 'block';
 
-    currentPersons.forEach(p => {
+    // Extension point: a module may narrow the view (generation limits). It
+    // returns the whole list when no limit is set.
+    const shown = (typeof window.filterVisiblePersons === 'function')
+        ? (window.filterVisiblePersons(currentPersons, currentRelationships) || currentPersons)
+        : currentPersons;
+    empty.style.display = shown.length ? 'none' : 'block';
+
+    shown.forEach(p => {
         const imgSrc = p.image_url ? p.image_url : placeholderAvatar;
         const role = roleForPerson(p.id);
         const roleClass = relationRoleClass(role);
@@ -837,6 +843,9 @@ function drawLines() {
         const p1 = findPerson(rel.person1_id);
         const p2 = findPerson(rel.person2_id);
         if (!p1 || !p2) return;
+        // A hidden node (generation limit) takes its connectors with it.
+        if (typeof window.isPersonVisible === 'function' &&
+            (!window.isPersonVisible(p1.id) || !window.isPersonVisible(p2.id))) return;
 
         const x1 = (p1.pos_x || 0) + NODE_CENTER_X;
         const y1 = (p1.pos_y || 0) + NODE_CENTER_Y;
@@ -865,8 +874,12 @@ function drawLines() {
         Object.keys(shape.attributes).forEach(key => {
             element.setAttribute(key, shape.attributes[key]);
         });
-        element.setAttribute('stroke', style.color);
-        element.setAttribute('stroke-width', '2.5');
+        element.setAttribute('stroke', typeof window.connectorColour === 'function'
+            ? window.connectorColour(style.color)
+            : style.color);
+        element.setAttribute('stroke-width', String(typeof window.connectorWidth === 'function'
+            ? window.connectorWidth()
+            : 2.5));
         if (style.dash) element.setAttribute('stroke-dasharray', style.dash);
         if (shape.tag === 'path') element.setAttribute('fill', 'none');
         svg.appendChild(element);
@@ -1493,6 +1506,9 @@ function populateSidebar(p) {
     renderConnections(p);
     renderLineage(p);
     if (typeof window.renderEventsPanel === 'function') window.renderEventsPanel();
+    // Extension point: feature modules add their own sections to this person's
+    // panel (sources, media, merge) without editing this file.
+    if (typeof window.onPersonPanelRendered === 'function') window.onPersonPanelRendered(p);
     clearDirty();
 }
 
@@ -2218,8 +2234,12 @@ function searchFor(query) {
         })
         .filter(entry => entry.score >= 0)
         .sort((a, b) => a.score - b.score || String(a.person.name).localeCompare(String(b.person.name)))
-        .slice(0, 8)
-        .map(entry => entry.person);
+        .map(entry => entry.person)
+        .filter(person => {
+            // Extension point: the search-filters module narrows the hits.
+            return typeof window.searchHitAllowed !== 'function' || window.searchHitAllowed(person);
+        })
+        .slice(0, 8);
 }
 
 function renderSearchResults() {
