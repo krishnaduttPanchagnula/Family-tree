@@ -43,5 +43,5 @@ Legend: `[ ]` todo · `[x]` done · `[~]` in progress
 - [x] Full `make check`, JS syntax pass, seeded-tree smoke test
 - [x] `CHANGELOG.md` `## v0.4.0` with every feature
 - [x] `README.md` updated (tools, endpoints, limitations)
-- [ ] Commit, tag `v0.4.0`, push, watch the release workflow
-- [ ] Verify assets + release notes
+- [x] Commit, tag `v0.4.0`, push, watch the release workflow
+- [x] Verify assets + release notes
