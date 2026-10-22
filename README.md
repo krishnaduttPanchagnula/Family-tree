@@ -2,12 +2,26 @@
 
 Family Tree Builder is a small Go web app for creating an interactive family tree. It stores people and relationships in SQLite, lets you arrange the tree visually, attach photos, and export the final tree as an image.
 
+Everything runs on your own machine: no account, no subscription, no upload of
+your family data anywhere. For how this compares to the rest of the category,
+see [`competitor-research.md`](competitor-research.md).
+
 ## Features
 
 - Interactive, expandable canvas for building a family tree
 - Drag-and-drop positioning for each person
-- Quick actions to add parents, siblings, partners, and children
-- Manual connection editing between existing people
+- One **Add** button in the canvas tool rail is the single place to add a person, a parent, a partner, a sibling or a child
+- Canvas tool rail grouping zoom, fit, auto-layout, centre, link, legend and export by purpose
+- Life events per person (marriage, residence, education, immigration…) with a family timeline
+- Relationship finder: how two people are related, with the path between them
+- Layout modes: ancestors above, compact, fan, or centred on one person
+- Tree styles: top-to-bottom or left-to-right, straight / elbow / curved
+  connections, rounded or square cards
+- Reloading re-arranges the tree back into generations, so a tree dragged into
+  a mess snaps back
+- Printable charts: family, ancestor and descendant layouts, portrait or landscape, A4 or Letter
+- Manual connection editing between existing people, with a picker for each
+  person in the link dialog
 - Person profile fields:
   - Name
   - Date of birth
@@ -29,6 +43,11 @@ Family Tree Builder is a small Go web app for creating an interactive family tre
 - Undo for destructive actions (`Ctrl+Z` or the header Undo button)
 - Confirmation dialog for deletes and other risky actions (no browser `confirm()`)
 - One-click JSON backup download and restore-from-backup
+- Full backup as a zip, including every uploaded photo
+- Automatic local snapshots (every 30 minutes) with restore and delete
+- GEDCOM import and export, plus CSV export of people and relationships
+- Read-only link for showing the tree to family on your own network
+- Kiosk mode (`?kiosk=1`) for showing the tree full screen
 - First-run getting-started checklist that tracks your progress
 - Keyboard shortcuts: `/` focuses search, `Ctrl+Z` undoes, `Esc` exits connect mode
 - Minimal modern themes: White, Black, Tokyo Night, Sand, and Milan
@@ -39,6 +58,45 @@ Family Tree Builder is a small Go web app for creating an interactive family tre
 - Dockerfile + docker-compose.yml for one-command local testing (with an optional hot-reload dev service)
 - GoReleaser-powered release pipeline for tags matching `v*`
 
+### Interface
+
+- A drawn icon set (one family, one stroke weight, `currentColor`) instead of
+  emoji or typographic glyphs
+- One vertical tool rail on the right edge of the canvas, so the tools never
+  cover the top of the tree
+- Detail panel that turns into a drawer below 820px, leaving the whole screen
+  for the chart
+- Save stays disabled until a field actually changes
+- Visible focus rings, AA-contrast secondary text in every theme, and themed
+  scrollbars and text selection
+- Display type (brand, person names, dialog titles) is set in Source Serif 4
+  for an archival feel; interface text stays in Inter
+- The fonts are served from this machine, so opening the app makes no request
+  to anyone else
+
+### Two URLs worth knowing
+
+| URL | What it does |
+| --- | --- |
+| `/?kiosk=1` | Full-screen tree for a tablet or TV. `Esc` leaves it. |
+| `/?share=TOKEN` | Read-only view. The link is created in Settings › Sharing. |
+
+### Feature modules
+
+The frontend is plain files with no build step. `web/app.js` holds the core
+app; each feature lives in its own `web/feat-*.js` + `web/feat-*.css` pair and
+is loaded from `index.html`:
+
+| Module | Feature |
+| --- | --- |
+| `feat-print` | Printable family, ancestor and descendant charts (A4/Letter, portrait/landscape) plus CSV links |
+| `feat-relations` | How two people are related, with the path between them |
+| `feat-layout` | Layout modes: ancestors above, compact, fan, centred on one person |
+| `feat-timeline` | Life events per person and the family-wide timeline |
+| `feat-data` | GEDCOM import/export, full backup with photos, local snapshots |
+| `feat-share` | Read-only link and kiosk mode |
+| `feat-styles` | Tree look: direction, connections and card shape |
+
 ### API endpoints
 
 | Method | Path | Purpose |
@@ -48,15 +106,38 @@ Family Tree Builder is a small Go web app for creating an interactive family tre
 | `PATCH`, `DELETE` | `/api/persons/{id}` | Update / delete a person (delete is undoable) |
 | `POST` | `/api/persons/{id}/photo` | Upload or replace a photo |
 | `DELETE` | `/api/relationships/{id}` | Remove a link |
+| `GET`, `POST` | `/api/events` | List / create a life event |
+| `PATCH`, `DELETE` | `/api/events/{id}` | Update / delete a life event |
 | `GET` | `/api/backup` | Download the full tree as JSON |
+| `GET` | `/api/backup/archive` | Download the tree and the photos as a zip |
 | `POST` | `/api/restore` | Replace the tree with an uploaded backup (undoable) |
 | `POST` | `/api/undo` | Re-insert the most recently deleted data |
+| `GET`, `POST` | `/api/snapshot`, `/api/snapshots` | Write a local snapshot / list them |
+| `GET`, `DELETE` | `/api/snapshots/{name}` | Read or delete one snapshot |
+| `GET` | `/api/gedcom` | Download the tree as GEDCOM |
+| `POST` | `/api/gedcom/import` | Import a GEDCOM file |
+| `GET` | `/api/export.csv` | Export people or relationships as CSV |
+| `GET`, `POST`, `DELETE` | `/api/share` | Create, inspect or stop the read-only link |
 
 ## Run locally
+
+With the Makefile:
+
+```sh
+make run
+```
+
+Or straight from Go:
 
 ```sh
 go run .
 ```
+
+> Run the app as a **package** (`go run .`), not as a single file
+> (`go run main.go`). The code is split across `main.go`, `events.go`,
+> `gedcom.go`, `backup.go` and `share.go`, and `go run main.go` compiles that
+> one file on its own, so every helper in the other files comes back as
+> "undefined".
 
 Then open:
 
@@ -64,10 +145,28 @@ Then open:
 http://localhost:8099
 ```
 
+Use a different port with `PORT=9000 make run` (or `PORT=9000 go run .`).
+
 The app creates/uses:
 
 - `familytree.db` for SQLite data
 - `uploads/` for local photo uploads
+- `backups/` for automatic local snapshots
+
+## Makefile targets
+
+`make` on its own lists them. The useful ones:
+
+| Target | What it does |
+| --- | --- |
+| `make run` | Start the app (`go run .`) |
+| `make build` | Build `./bin/familytree` |
+| `make test` | Run the tests |
+| `make check` | Format check, `go vet` and the tests |
+| `make cover` | Tests with a coverage summary |
+| `make dev` | Run with hot reload (needs `air`) |
+| `make docker` | Build and run the container |
+| `make clean` | Remove build artefacts and the local database |
 
 ## Run with Docker
 
@@ -80,6 +179,7 @@ docker compose up --build
 
 Then open http://localhost:8099. The database and photo uploads are written to
 `./data/` on the host, so they survive image rebuilds and are easy to wipe.
+Automatic snapshots are written to `./data/backups/`.
 
 | Task | Command |
 | --- | --- |
@@ -178,6 +278,9 @@ The release workflow will:
 These are high-impact features that would improve the user experience.
 Sections marked **done** are already implemented.
 
+Competitive research behind this list lives in
+[`competitor-research.md`](competitor-research.md).
+
 ### Guided onboarding — done
 
 A first-run checklist walks users through:
@@ -191,16 +294,17 @@ A first-run checklist walks users through:
 
 This reduces the blank-canvas problem for new users. Reopen it from Settings.
 
-### Auto-layout
+### Auto-layout — partially done
 
-Add an automatic layout button that arranges generations vertically or horizontally. Users could still drag people manually afterward, but auto-layout would help large trees stay readable.
+`Auto-layout` in the tool rail arranges everyone into parent-to-child
+generations, and `Centre` frames the selected person.
 
 Useful modes:
 
-- Ancestors above, descendants below
+- Ancestors above, descendants below — done
 - Compact family view
 - Fan/tree view
-- Center on selected person
+- Center on selected person — done
 
 ### Better relationship model — mostly done
 
@@ -222,15 +326,11 @@ Large trees need fast navigation. Helpful additions:
 - Jump to person — done
 - Breadcrumb path from selected person to root — done
 
-### Timeline view
+### Timeline view — done
 
-A timeline can make family history easier to understand:
-
-- Births
-- Deaths
-- Marriages/partnerships
-- Migrations
-- Important life events
+Life events (marriage, divorce, residence, education, occupation,
+immigration) are stored per person and shown as a timeline in the sidebar,
+with a family-wide view grouped by year and generation.
 
 ### Person detail pages
 
@@ -247,46 +347,50 @@ A focused person profile could include:
 
 To help users bring existing family data:
 
-- GEDCOM import/export
-- CSV import
-- JSON restore from exported data
+- GEDCOM import/export — done
+- CSV import — export is done (`/api/export.csv`), import is not
+- JSON restore from exported data — done
 
 ### Collaboration and sharing
 
 Family trees are often built with relatives. Possible improvements:
 
-- Read-only share links
+- Read-only share links — done (a link on your own network, no account)
 - Invite collaborators
 - Change history
 - Comments on people
 - Suggested edits flow
 
-### Data safety — partially done
+### Data safety — mostly done
 
 Important for user trust:
 
 - One-click backup — done
 - Restore from backup — done
-- Scheduled export
+- Full backup with the photos (zip) — done
+- Automatic local snapshots every 30 minutes, restorable — done
+- Scheduled export — done (the snapshots are the schedule)
 - Clear location of local database and uploads — done (shown in Settings)
 - Warning before deleting people with many relationships — done (confirm dialog shows the impact)
+- Undo for destructive person and relationship actions — done (life events are
+  restored with the person, but deleting an event itself is not undoable)
 
 ### Accessibility and mobile improvements
 
 Helpful upgrades:
 
-- Keyboard navigation
-- Better focus states
-- High-contrast mode
+- Keyboard navigation — done (cards are focusable, `Enter`/`Space` selects)
+- Better focus states — done
 - Larger tap targets on mobile
-- Responsive sidebar/drawer layout
+- Responsive sidebar/drawer layout — done
+- High-contrast mode
 
 ## Development notes
 
 Run tests:
 
 ```sh
-go test ./...
+make test        # or: go test ./...
 ```
 
 Check GoReleaser config locally, if GoReleaser is installed:

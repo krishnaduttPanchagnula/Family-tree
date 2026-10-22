@@ -49,3 +49,21 @@ jobs:
           CC_aarch64_linux: aarch64-linux-gnu-gcc
           CXX_aarch64_linux: aarch64-linux-gnu-g++
           CGO_ENABLED: "1"
+
+      # The release notes come from the CHANGELOG section for this tag, so
+      # they list the features instead of the commit list.
+      - name: Write the release notes from the changelog
+        run: |
+          NOTES=$(awk -v tag="${GITHUB_REF_NAME}" '
+            $0 == "## " tag { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md)
+          if [ -n "$NOTES" ]; then
+            echo "Using the CHANGELOG section for ${GITHUB_REF_NAME} as the release notes"
+            gh release edit "${GITHUB_REF_NAME}" --notes "${NOTES}"
+          else
+            echo "No CHANGELOG section for ${GITHUB_REF_NAME}; keeping the generated notes"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

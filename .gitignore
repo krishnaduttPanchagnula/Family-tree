@@ -4,10 +4,16 @@
 familytree.db
 familytree.db-*
 uploads/
+backups/
 
 # Dev-server artifacts (docker compose up dev / air)
 tmp/
 build_errors.log
+bin/
+coverage.out
 
 # Local configuration (copy .env.example to .env)
 .env
+
+# GoReleaser output
+dist/
