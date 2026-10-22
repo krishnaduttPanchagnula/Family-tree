@@ -1,0 +1,274 @@
+/* ============================================================
+   Relationship finder - operates on the data already in the tree.
+   Calm, dense, no decoration that does not work.
+   ============================================================ */
+
+.ft-relations-dialog {
+    max-width: 580px;
+    width: min(580px, 94vw);
+    padding: 0;
+    overflow: hidden;
+}
+
+.ft-relations-shell {
+    padding: 20px 22px 18px;
+    max-height: min(86vh, 720px);
+    overflow-y: auto;
+}
+
+/* --- head --- */
+.ft-relations-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+.ft-relations-title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 1.2em;
+    font-weight: 700;
+    letter-spacing: -0.005em;
+}
+
+/* --- pickers --- */
+.ft-relations-pickers {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+    margin-top: 6px;
+}
+.ft-relations-picker { min-width: 0; }
+.ft-relations-picker .field-label { margin-top: 12px; }
+
+.ft-relations-search { position: relative; display: flex; align-items: center; }
+.ft-relations-search input {
+    padding-left: 32px;
+    margin: 0;
+}
+.ft-relations-search-icon {
+    position: absolute;
+    left: 10px;
+    width: 15px;
+    height: 15px;
+    color: var(--muted);
+    pointer-events: none;
+}
+
+.ft-relations-list {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    margin: 0;
+    padding: 4px;
+    list-style: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 22px var(--shadow);
+    max-height: 210px;
+    overflow-y: auto;
+    z-index: 5;
+}
+.ft-relations-option {
+    width: 100%;
+    margin: 0;
+    padding: 7px 9px;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 0.85em;
+    text-align: left;
+    justify-content: flex-start;
+}
+.ft-relations-option:hover { background: var(--surface-2); }
+.ft-relations-option.is-active { background: var(--surface-3); }
+.ft-relations-option-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ft-relations-empty-option {
+    padding: 8px 9px;
+    font-size: 0.82em;
+    color: var(--muted);
+}
+
+.ft-relations-current {
+    margin: 6px 0 0;
+    min-height: 1.2em;
+    font-size: 0.76em;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ft-relations-swap {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    margin: 20px 0 0;
+    border-radius: 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+}
+.ft-relations-swap:hover { background: var(--surface-3); color: var(--accent); border-color: var(--accent); }
+
+/* --- actions --- */
+.ft-relations-hint {
+    margin: 10px 0 0;
+    min-height: 1.2em;
+    font-size: 0.8em;
+    color: var(--muted);
+}
+.ft-relations-hint.is-error { color: var(--danger); font-weight: 600; }
+
+.ft-relations-find {
+    width: 100%;
+    margin: 10px 0 0;
+}
+.ft-relations-find:disabled,
+.ft-relations-find:disabled:hover {
+    background: var(--surface-2);
+    color: var(--muted);
+    border-color: var(--border);
+    cursor: not-allowed;
+}
+
+/* --- result --- */
+.ft-relations-result {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+}
+.ft-relations-headline {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 1.06em;
+    font-weight: 700;
+    line-height: 1.35;
+}
+.ft-relations-detail {
+    margin: 4px 0 0;
+    font-size: 0.82em;
+    color: var(--muted);
+}
+
+.ft-relations-chain {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+    margin: 0;
+    padding: 0 0 4px;
+    list-style: none;
+    overflow-x: auto;
+}
+.ft-relations-node {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 104px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 9px 6px 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    text-align: center;
+}
+.ft-relations-node.is-endpoint {
+    background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+    border-color: var(--accent);
+}
+.ft-relations-tag {
+    position: absolute;
+    top: 5px;
+    left: 7px;
+    font-size: 0.6em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+}
+.ft-relations-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+}
+.ft-relations-avatar-text {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7em;
+    font-weight: 700;
+    color: var(--muted);
+}
+.ft-relations-node-name {
+    font-size: 0.82em;
+    font-weight: 600;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+.ft-relations-node-role {
+    font-size: 0.7em;
+    color: var(--muted);
+    line-height: 1.25;
+}
+.ft-relations-arrow {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    color: var(--muted);
+}
+.ft-relations-arrow .icon { width: 14px; height: 14px; }
+
+.ft-relations-facts {
+    margin: 14px 0 0;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+}
+.ft-relations-fact {
+    display: grid;
+    grid-template-columns: 128px minmax(0, 1fr);
+    gap: 10px;
+    align-items: baseline;
+}
+.ft-relations-fact-label {
+    font-size: 0.7em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+.ft-relations-fact-value {
+    margin: 0;
+    font-size: 0.84em;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.ft-relations-empty {
+    background: var(--surface-2);
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 0.85em;
+    line-height: 1.5;
+    color: var(--muted);
+}
+.ft-relations-empty.is-error {
+    background: var(--danger-soft);
+    border: 1px solid var(--danger-border);
+    color: var(--danger);
+}
+
+@media (max-width: 520px) {
+    .ft-relations-pickers { grid-template-columns: minmax(0, 1fr); }
+    .ft-relations-swap { margin: 8px 0 0; justify-self: start; }
+    .ft-relations-fact { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}

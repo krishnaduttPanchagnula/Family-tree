@@ -29,7 +29,7 @@ import (
 	"google.golang.org/api/option"
 )
 
-//go:embed web/index.html web/style.css web/app.js
+//go:embed web
 var webFS embed.FS
 var Port = "8099"
 
@@ -83,8 +83,14 @@ type Relationship struct {
 
 // --- Main Init ---
 func main() {
+	// PORT overrides the default port, e.g. `PORT=9000 make run`.
+	if env := strings.TrimSpace(os.Getenv("PORT")); env != "" {
+		Port = env
+	}
+
 	os.MkdirAll("./uploads", os.ModePerm) // Ensure local uploads folder exists
 	initDB()
+	initEventTable()
 	initOauth()
 
 	http.HandleFunc("/", serveUI)
@@ -96,27 +102,47 @@ func main() {
 	}
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 
-	http.HandleFunc("/api/settings", handleSettings)
+	http.HandleFunc("/api/settings", guardWrite(handleSettings))
 	http.HandleFunc("/api/update-check", handleUpdateCheck)
-	http.HandleFunc("/api/persons", handlePersons)
-	http.HandleFunc("/api/persons/", handlePersonByID) // /api/persons/{id} and /api/persons/{id}/photo
-	http.HandleFunc("/api/relationships", handleRelationships)
-	http.HandleFunc("/api/relationships/", handleRelationshipByID) // /api/relationships/{id}
+	http.HandleFunc("/api/persons", guardWrite(handlePersons))
+	http.HandleFunc("/api/persons/", guardWrite(handlePersonByID)) // /api/persons/{id} and /api/persons/{id}/photo
+	http.HandleFunc("/api/relationships", guardWrite(handleRelationships))
+	http.HandleFunc("/api/relationships/", guardWrite(handleRelationshipByID)) // /api/relationships/{id}
+
+	// Life events (timeline) for each person.
+	http.HandleFunc("/api/events", guardWrite(handleEvents))
+	http.HandleFunc("/api/events/", guardWrite(handleEventByID)) // /api/events/{id}
 
 	// Data safety: download a full backup, replace all data from a backup, and
 	// re-insert rows that a delete just removed (powers the in-app Undo).
 	http.HandleFunc("/api/backup", handleBackup)
-	http.HandleFunc("/api/restore", handleRestore)
-	http.HandleFunc("/api/undo", handleUndo)
+	http.HandleFunc("/api/backup/archive", handleBackupArchive) // zip with the photos
+	http.HandleFunc("/api/restore", guardWrite(handleRestore))
+	http.HandleFunc("/api/undo", guardWrite(handleUndo))
+
+	// Local snapshots: automatic and on-demand copies of the tree.
+	http.HandleFunc("/api/snapshots", handleSnapshots)
+	http.HandleFunc("/api/snapshots/", handleSnapshotByID) // /api/snapshots/{name}
+	http.HandleFunc("/api/snapshot", guardWrite(handleSnapshotCreate))
+
+	// Interchange formats.
+	http.HandleFunc("/api/gedcom", handleGEDCOMExport)
+	http.HandleFunc("/api/gedcom/import", guardWrite(handleGEDCOMImport))
+	http.HandleFunc("/api/export.csv", handleCSVExport)
+
+	// Read-only link for showing the tree to family on the local network.
+	http.HandleFunc("/api/share", guardWrite(handleShare))
 
 	// AWS S3 integration
-	http.HandleFunc("/api/s3/buckets", handleS3Buckets)
-	http.HandleFunc("/api/s3/select-bucket", handleS3SelectBucket)
+	http.HandleFunc("/api/s3/buckets", guardOwnerOnly(handleS3Buckets))
+	http.HandleFunc("/api/s3/select-bucket", guardWrite(handleS3SelectBucket))
 
 	// Google Auth Routes
-	http.HandleFunc("/auth/login", handleGoogleLogin)
-	http.HandleFunc("/auth/callback", handleGoogleCallback)
-	http.HandleFunc("/api/oauth/status", handleOauthStatus)
+	http.HandleFunc("/auth/login", guardOwnerOnly(handleGoogleLogin))
+	http.HandleFunc("/auth/callback", guardOwnerOnly(handleGoogleCallback))
+	http.HandleFunc("/api/oauth/status", guardOwnerOnly(handleOauthStatus))
+
+	startSnapshotScheduler()
 
 	fmt.Printf("Server running on http://localhost:%s\n", Port)
 	log.Fatal(http.ListenAndServe(":"+Port, nil))
@@ -133,6 +159,29 @@ func initDB() {
 		log.Fatal(err)
 	}
 
+	if err := createSchema(); err != nil {
+		log.Fatal("Failed to init database:", err)
+	}
+	// Older builds could write relationships pointing at people that don't
+	// exist (FK checks were effectively off, and a quick-add bug sent
+	// person2_id = 0). Sweep those orphans so they can't break rendering.
+	db.Exec(`DELETE FROM relationships
+		WHERE person1_id IS NULL OR person2_id IS NULL
+		   OR person1_id NOT IN (SELECT id FROM persons)
+		   OR person2_id NOT IN (SELECT id FROM persons)`)
+
+	// Migrate older databases created before these columns existed.
+	migrateAddColumn("persons", "pos_x", "REAL DEFAULT 0")
+	migrateAddColumn("persons", "pos_y", "REAL DEFAULT 0")
+	migrateAddColumn("persons", "dob", "TEXT DEFAULT ''")
+	migrateAddColumn("persons", "dod", "TEXT DEFAULT ''")
+	migrateAddColumn("persons", "birth_country", "TEXT DEFAULT ''")
+	migrateAddColumn("persons", "profession", "TEXT DEFAULT ''")
+	migrateAddColumn("persons", "facts", "TEXT DEFAULT ''")
+}
+
+// createSchema creates the tables the app needs, if they are not there yet.
+func createSchema() error {
 	createTables := `
 	CREATE TABLE IF NOT EXISTS persons (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -154,26 +203,8 @@ func initDB() {
 		FOREIGN KEY(person1_id) REFERENCES persons(id) ON DELETE CASCADE,
 		FOREIGN KEY(person2_id) REFERENCES persons(id) ON DELETE CASCADE
 	);`
-	if _, err := db.Exec(createTables); err != nil {
-		log.Fatal("Failed to init database:", err)
-	}
-
-	// Older builds could write relationships pointing at people that don't
-	// exist (FK checks were effectively off, and a quick-add bug sent
-	// person2_id = 0). Sweep those orphans so they can't break rendering.
-	db.Exec(`DELETE FROM relationships
-		WHERE person1_id IS NULL OR person2_id IS NULL
-		   OR person1_id NOT IN (SELECT id FROM persons)
-		   OR person2_id NOT IN (SELECT id FROM persons)`)
-
-	// Migrate older databases created before these columns existed.
-	migrateAddColumn("persons", "pos_x", "REAL DEFAULT 0")
-	migrateAddColumn("persons", "pos_y", "REAL DEFAULT 0")
-	migrateAddColumn("persons", "dob", "TEXT DEFAULT ''")
-	migrateAddColumn("persons", "dod", "TEXT DEFAULT ''")
-	migrateAddColumn("persons", "birth_country", "TEXT DEFAULT ''")
-	migrateAddColumn("persons", "profession", "TEXT DEFAULT ''")
-	migrateAddColumn("persons", "facts", "TEXT DEFAULT ''")
+	_, err := db.Exec(createTables)
+	return err
 }
 
 // migrateAddColumn adds a column to an existing table if it doesn't already
@@ -760,6 +791,7 @@ type backupPayload struct {
 	ExportedAt    string         `json:"exported_at"`
 	Persons       []Person       `json:"persons"`
 	Relationships []Relationship `json:"relationships"`
+	Events        []Event        `json:"events"`
 }
 
 func fetchAllPersons() ([]Person, error) {
@@ -885,6 +917,39 @@ func writePayload(payload backupPayload, wipe bool) error {
 	tx.Exec(`INSERT INTO sqlite_sequence (name, seq) SELECT 'persons', COALESCE(MAX(id), 0) FROM persons`)
 	tx.Exec(`INSERT INTO sqlite_sequence (name, seq) SELECT 'relationships', COALESCE(MAX(id), 0) FROM relationships`)
 
+	// Life events come last: they point at people, which must exist first.
+	if wipe {
+		tx.Exec("DELETE FROM events")
+		for _, ev := range payload.Events {
+			if !known[ev.PersonID] {
+				continue
+			}
+			tx.Exec(`INSERT INTO events (id, person_id, kind, date, place, title, note)
+				VALUES (?, ?, ?, ?, ?, ?, ?)
+				ON CONFLICT(id) DO UPDATE SET person_id = excluded.person_id, kind = excluded.kind,
+					date = excluded.date, place = excluded.place, title = excluded.title, note = excluded.note`,
+				ev.ID, ev.PersonID, normaliseEventKind(ev.Kind), ev.Date, ev.Place, ev.Title, ev.Note)
+		}
+	} else {
+		// A merge only adds what is missing, so an undo never disturbs the
+		// events that are already stored.
+		for _, ev := range payload.Events {
+			if !known[ev.PersonID] {
+				continue
+			}
+			var existing int
+			tx.QueryRow(`SELECT COUNT(*) FROM events WHERE id = ?`, ev.ID).Scan(&existing)
+			if existing > 0 {
+				continue
+			}
+			tx.Exec(`INSERT INTO events (id, person_id, kind, date, place, title, note)
+				VALUES (?, ?, ?, ?, ?, ?, ?)`,
+				ev.ID, ev.PersonID, normaliseEventKind(ev.Kind), ev.Date, ev.Place, ev.Title, ev.Note)
+		}
+	}
+	tx.Exec("DELETE FROM sqlite_sequence WHERE name = 'events'")
+	tx.Exec(`INSERT INTO sqlite_sequence (name, seq) SELECT 'events', COALESCE(MAX(id), 0) FROM events`)
+
 	return tx.Commit()
 }
 
@@ -905,6 +970,11 @@ func handleBackup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	events, err := fetchAllEvents()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="family-tree-backup-%s.json"`, time.Now().Format("2006-01-02")))
@@ -913,6 +983,7 @@ func handleBackup(w http.ResponseWriter, r *http.Request) {
 		ExportedAt:    time.Now().UTC().Format(time.RFC3339),
 		Persons:       persons,
 		Relationships: rels,
+		Events:        events,
 	})
 }
 
@@ -1015,6 +1086,15 @@ func serveUI(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	// A valid ?share= token turns the browser into a read-only viewer.
+	if setShareCookie(w, r) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(data)
+		return
+	}
+	// Without the token this is the owner's own app again, so the read-only
+	// state is dropped and the tree can be edited (and sharing stopped).
+	clearShareCookie(w)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write(data)
 }

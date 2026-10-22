@@ -1,0 +1,415 @@
+/* ============================================================
+   Life-event timeline panel and family timeline dialog
+   (feat-timeline.js)
+   ============================================================ */
+
+/* ================= Sidebar panel ================= */
+.ft-tl-panel { display: block; }
+
+.ft-tl-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.ft-tl-heading {
+    margin: 0;
+    min-width: 0;
+    font-family: var(--font-display);
+    font-size: 1.02em;
+    font-weight: 700;
+}
+
+.ft-tl-panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+/* Small square-ish buttons used across the module */
+.ft-tl-btn {
+    width: auto;
+    margin: 0;
+    padding: 6px 10px;
+    font-size: 0.76em;
+    font-weight: 600;
+    border-radius: 7px;
+    white-space: nowrap;
+}
+.ft-tl-btn .icon { width: 15px; height: 15px; }
+
+.ft-tl-btn-primary {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border: 1px solid var(--accent);
+}
+.ft-tl-btn-primary:hover {
+    background: color-mix(in srgb, var(--accent) 85%, var(--text));
+    border-color: color-mix(in srgb, var(--accent) 85%, var(--text));
+}
+
+.ft-tl-btn-ghost {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+.ft-tl-btn-ghost:hover {
+    background: var(--surface-2);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.ft-tl-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ft-tl-btn:disabled:hover {
+    background: var(--surface);
+    border-color: var(--border);
+    color: var(--text);
+}
+
+/* ================= Empty state ================= */
+.ft-tl-empty {
+    margin: 0 0 12px;
+    padding: 12px 10px;
+    font-size: 0.84em;
+    line-height: 1.5;
+    text-align: center;
+    color: var(--muted);
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+}
+
+/* ================= Vertical timeline ================= */
+.ft-tl-list {
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0 20px;
+    position: relative;
+}
+.ft-tl-list::before {
+    content: "";
+    position: absolute;
+    left: 5px;
+    top: 8px;
+    bottom: 8px;
+    width: 1px;
+    background: var(--border);
+}
+
+.ft-tl-entry {
+    position: relative;
+    padding: 0 0 14px 0;
+}
+.ft-tl-entry:last-child { padding-bottom: 2px; }
+
+.ft-tl-marker {
+    position: absolute;
+    left: -20px;
+    top: 4px;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--muted);
+    border: 2px solid var(--surface);
+}
+
+.ft-tl-entry[data-kind="birth"] .ft-tl-marker { background: var(--parent); }
+.ft-tl-entry[data-kind="death"] .ft-tl-marker { background: var(--unknown); }
+.ft-tl-entry[data-kind="marriage"] .ft-tl-marker { background: var(--spouse); }
+.ft-tl-entry[data-kind="divorce"] .ft-tl-marker { background: var(--spouse); }
+.ft-tl-entry[data-kind="residence"] .ft-tl-marker { background: var(--sibling); }
+.ft-tl-entry[data-kind="education"] .ft-tl-marker { background: var(--sibling); }
+.ft-tl-entry[data-kind="occupation"] .ft-tl-marker { background: var(--parent); }
+.ft-tl-entry[data-kind="immigration"] .ft-tl-marker { background: var(--adoptive); }
+.ft-tl-entry[data-kind="other"] .ft-tl-marker { background: var(--muted); }
+
+.ft-tl-entry-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.ft-tl-kind {
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text);
+}
+
+.ft-tl-date {
+    font-size: 0.8em;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.ft-tl-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.ft-tl-readonly {
+    margin-left: auto;
+    font-size: 0.68em;
+    font-weight: 500;
+    color: var(--muted);
+}
+
+.ft-tl-title {
+    margin: 3px 0 0;
+    font-size: 0.88em;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.ft-tl-place {
+    margin: 2px 0 0;
+    font-size: 0.8em;
+    color: var(--muted);
+}
+
+.ft-tl-note {
+    margin: 4px 0 0;
+    font-size: 0.82em;
+    line-height: 1.45;
+    color: var(--muted);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* ================= Mini buttons ================= */
+.ft-tl-mini {
+    width: auto;
+    margin: 0;
+    padding: 2px 8px;
+    font-size: 0.72em;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+.ft-tl-mini .icon { width: 13px; height: 13px; }
+.ft-tl-mini:hover {
+    background: var(--surface-2);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+.ft-tl-mini-danger { color: var(--danger); }
+.ft-tl-mini-danger:hover {
+    background: var(--danger-soft);
+    border-color: var(--danger-border);
+    color: var(--danger);
+}
+.ft-tl-mini:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ================= Inline form ================= */
+.ft-tl-form-wrap {
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.ft-tl-form { display: block; }
+.ft-tl-form .field-label { margin-top: 12px; }
+.ft-tl-form .field-label:first-of-type { margin-top: 0; }
+.ft-tl-form input,
+.ft-tl-form select,
+.ft-tl-form textarea {
+    width: 100%;
+    margin: 0;
+}
+.ft-tl-form textarea { resize: vertical; font-family: inherit; }
+.ft-tl-form .dialog-actions { margin-top: 12px; }
+.ft-tl-form .dialog-actions button { width: auto; flex: 1; }
+
+.ft-tl-entry-editing {
+    padding-bottom: 14px;
+}
+.ft-tl-entry-editing .ft-tl-marker { background: var(--accent); }
+
+/* ================= Family timeline dialog ================= */
+.ft-timeline-dialog {
+    max-width: 700px;
+    width: min(700px, 94vw);
+}
+
+.ft-tl-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.ft-tl-dialog h3 { margin-bottom: 0; }
+
+.ft-tl-search {
+    margin: 0;
+    width: 100%;
+}
+
+.ft-tl-kinds {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.ft-tl-kind-btn {
+    width: auto;
+    margin: 0;
+    padding: 4px 9px;
+    font-size: 0.74em;
+    font-weight: 600;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+}
+.ft-tl-kind-btn:hover { border-color: var(--accent); color: var(--accent); }
+.ft-tl-kind-btn.active {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+}
+.ft-tl-kind-btn.active:hover { color: var(--accent-ink); }
+.ft-tl-kind-count {
+    font-variant-numeric: tabular-nums;
+    opacity: 0.75;
+}
+.ft-tl-kind-reset {
+    background: none;
+    border-style: dashed;
+}
+
+.ft-tl-fam {
+    max-height: min(56vh, 460px);
+    overflow-y: auto;
+    border-top: 1px solid var(--border);
+    padding-top: 4px;
+}
+
+.ft-tl-group { padding-bottom: 4px; }
+
+.ft-tl-year {
+    position: sticky;
+    top: 0;
+    margin: 10px 0 2px;
+    padding: 2px 0;
+    background: var(--surface);
+    font-family: var(--font-display);
+    font-size: 0.95em;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.ft-tl-fam-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.ft-tl-fam-row {
+    position: relative;
+    display: grid;
+    grid-template-columns: 86px 92px minmax(120px, 1fr) minmax(0, 1.6fr);
+    gap: 10px;
+    align-items: baseline;
+    padding: 6px 0 6px 18px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.84em;
+}
+
+/* The event kind is marked with a dot, not a coloured rule down the side. */
+.ft-tl-fam-row::before {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: 11px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+}
+
+.ft-tl-fam-row[data-kind="birth"]::before { background: var(--parent); }
+.ft-tl-fam-row[data-kind="death"]::before { background: var(--unknown); }
+.ft-tl-fam-row[data-kind="marriage"]::before { background: var(--spouse); }
+.ft-tl-fam-row[data-kind="divorce"]::before { background: var(--spouse); }
+.ft-tl-fam-row[data-kind="residence"]::before { background: var(--sibling); }
+.ft-tl-fam-row[data-kind="education"]::before { background: var(--sibling); }
+.ft-tl-fam-row[data-kind="occupation"]::before { background: var(--parent); }
+.ft-tl-fam-row[data-kind="immigration"]::before { background: var(--adoptive); }
+
+.ft-tl-fam-date {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.ft-tl-fam-kind {
+    font-size: 0.82em;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.ft-tl-fam-person {
+    width: auto;
+    margin: 0;
+    padding: 0;
+    display: block;
+    text-align: left;
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-size: 1em;
+    font-weight: 600;
+    line-height: 1.3;
+}
+.ft-tl-fam-person:hover {
+    background: none;
+    text-decoration: underline;
+}
+
+.ft-tl-gen {
+    display: block;
+    font-size: 0.74em;
+    font-weight: 500;
+    color: var(--muted);
+}
+
+.ft-tl-fam-details {
+    color: var(--muted);
+    min-width: 0;
+    word-break: break-word;
+}
+.ft-tl-fam-title { color: var(--text); }
+
+/* ================= Focus ================= */
+.ft-tl-btn:focus-visible,
+.ft-tl-mini:focus-visible,
+.ft-tl-kind-btn:focus-visible,
+.ft-tl-fam-person:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+}
+.ft-tl-fam-person:focus-visible { outline-offset: 3px; }
+
+/* ================= Narrow screens ================= */
+@media (max-width: 620px) {
+    .ft-tl-fam-row {
+        grid-template-columns: 76px minmax(0, 1fr);
+        row-gap: 2px;
+    }
+    .ft-tl-fam-kind { grid-column: 2; grid-row: 1; }
+    .ft-tl-fam-date { grid-row: 1; }
+    .ft-tl-fam-person { grid-column: 1 / -1; grid-row: 2; }
+    .ft-tl-fam-details { grid-column: 1 / -1; grid-row: 3; }
+}

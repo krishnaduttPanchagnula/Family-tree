@@ -1,0 +1,163 @@
+/* ============================================================
+ * Family Tree Builder - layout mode picker (feat-layout.js)
+ * ============================================================ */
+
+.ft-layout-dialog {
+    max-width: 440px;
+    width: min(440px, 92vw);
+}
+
+.ft-layout-body {
+    display: flex;
+    flex-direction: column;
+}
+
+.ft-layout-body h3 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 1.25em;
+    font-weight: 700;
+    letter-spacing: -0.005em;
+}
+
+.ft-layout-body .dialog-copy {
+    margin: 6px 0 0;
+}
+
+/* Empty state */
+.ft-layout-empty {
+    margin: 16px 0 2px;
+    padding: 18px 14px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-size: 0.9em;
+    text-align: center;
+}
+.ft-layout-empty[hidden] { display: none; }
+
+/* Radio cards */
+.ft-mode-group {
+    border: 0;
+    margin: 14px 0 0;
+    padding: 0;
+    display: grid;
+    gap: 8px;
+}
+.ft-mode-group[hidden] { display: none; }
+
+.ft-mode {
+    position: relative;
+    display: block;
+    cursor: pointer;
+}
+
+.ft-mode-input {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    opacity: 0;
+}
+
+.ft-mode-body {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.ft-mode:hover .ft-mode-body { border-color: var(--accent); }
+
+.ft-mode:has(.ft-mode-input:checked) .ft-mode-body {
+    border-color: var(--accent);
+    background: var(--surface-2);
+}
+
+.ft-mode:has(.ft-mode-input:focus-visible) .ft-mode-body {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+}
+
+/* Disabled: the diagram fades, the words stay readable. */
+.ft-mode.is-disabled { cursor: not-allowed; }
+.ft-mode.is-disabled .ft-mode-body {
+    background: var(--surface-2);
+}
+.ft-mode.is-disabled .ft-mode-figure { opacity: 0.45; }
+.ft-mode.is-disabled .ft-mode-name { color: var(--muted); }
+.ft-mode.is-disabled:hover .ft-mode-body { border-color: var(--border); }
+
+.ft-mode-figure {
+    flex: none;
+    line-height: 0;
+    color: var(--muted);
+}
+
+.ft-mode-svg {
+    width: 64px;
+    height: 36px;
+}
+.ft-mode-svg .ft-mode-accent {
+    fill: var(--accent);
+    stroke: none;
+}
+
+.ft-mode-text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.ft-mode-name {
+    color: var(--text);
+    font-size: 0.92em;
+    font-weight: 600;
+}
+
+.ft-mode-desc {
+    color: var(--muted);
+    font-size: 0.82em;
+    line-height: 1.4;
+}
+
+.ft-mode-check {
+    flex: none;
+    align-self: center;
+    margin-left: auto;
+    color: var(--accent);
+    opacity: 0;
+}
+.ft-mode:has(.ft-mode-input:checked) .ft-mode-check { opacity: 1; }
+
+/* Note under the cards */
+.ft-mode-note {
+    margin: 10px 0 0;
+    color: var(--muted);
+    font-size: 0.82em;
+    line-height: 1.45;
+}
+.ft-mode-note[hidden] { display: none; }
+
+.ft-layout-body .dialog-actions { margin-top: 16px; }
+.ft-layout-body .dialog-actions button { flex: 1; }
+
+.ft-layout-body .dialog-actions button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.ft-layout-body .dialog-actions button:disabled:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+@media (max-width: 480px) {
+    .ft-mode-svg { width: 52px; height: 29px; }
+}

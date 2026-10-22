@@ -1,0 +1,196 @@
+/* ============================================================
+   Family Tree Builder - read-only link + kiosk view
+   ============================================================ */
+
+/* ---------------- Settings: read-only link ---------------- */
+
+.ft-share {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ft-share-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 2px 0 0;
+    font-size: 0.86em;
+    font-weight: 600;
+}
+
+.ft-share-muted {
+    color: var(--muted);
+    font-weight: 500;
+}
+
+.ft-share-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex: none;
+}
+
+.ft-share-dot.on {
+    background: var(--accent);
+}
+
+.ft-share-url {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.78em;
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.ft-share-actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* The flex column owns the rhythm, so the shared margins are flattened. */
+.ft-share .settings-note,
+.ft-share .field-label {
+    margin: 0;
+}
+
+.ft-share-actions button {
+    width: auto;
+    flex: 1 1 0;
+    margin: 0;
+}
+
+.ft-share-error {
+    margin: 0;
+    font-size: 0.8em;
+    line-height: 1.5;
+    color: var(--danger);
+}
+
+/* ---------------- Read-only banner ---------------- */
+/* Sits inside the teal header, so it uses the header's ink colours. */
+
+.ft-ro-banner {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--text-on-accent) 35%, transparent);
+    background: color-mix(in srgb, var(--text-on-accent) 12%, transparent);
+    color: var(--text-on-accent);
+    font-size: 0.78em;
+    font-weight: 500;
+    min-width: 0;
+}
+
+.ft-ro-banner span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ft-ro-banner .icon {
+    width: 14px;
+    height: 14px;
+}
+
+/* Fallback when there is no header to sit in. */
+.ft-ro-banner-floating {
+    position: fixed;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 200;
+    background: var(--surface);
+    border-color: var(--border);
+    color: var(--text);
+    max-width: calc(100% - 24px);
+}
+
+@media (max-width: 900px) {
+    .ft-ro-banner span {
+        white-space: normal;
+    }
+}
+
+/* ---------------- Read-only mode ---------------- */
+/* The server refuses every write while the shared link is open, so the
+   write controls are removed from the page instead of failing on click. */
+
+body.ft-readonly #addBtn,
+body.ft-readonly #addMenu,
+body.ft-readonly #exportMenu,
+body.ft-readonly .rail-btn[title="Export the tree"],
+body.ft-readonly .rail-btn[title="Settings"],
+body.ft-readonly #exportBtn,
+body.ft-readonly #settingsBtn,
+body.ft-readonly #savePersonBtn,
+body.ft-readonly #sidebarFooter,
+body.ft-readonly .connection-remove,
+body.ft-readonly .link-hint,
+body.ft-readonly #checklistPanel,
+body.ft-readonly #connectBtn,
+body.ft-readonly #connectHint,
+body.ft-readonly #undoBtn,
+body.ft-readonly #storageChip,
+body.ft-readonly #sidebarEmpty .btn-primary,
+body.ft-readonly .btn-outline.full,
+body.ft-readonly .file-label,
+body.ft-readonly .empty-actions {
+    display: none !important;
+}
+
+/* The export dropdown, hidden as a whole so no menu is left behind.
+   Kept in its own rule: a browser without :has() drops only this one. */
+body.ft-readonly .rail-group:has(#exportMenu) .dropdown {
+    display: none !important;
+}
+
+/* The sidebar fields are not a write control, but nothing can be saved
+   from a shared view, so they read as plain text. */
+body.ft-readonly .tab-panel input,
+body.ft-readonly .tab-panel textarea {
+    pointer-events: none;
+    opacity: 0.75;
+}
+
+/* ---------------- Kiosk mode ---------------- */
+
+body.ft-kiosk .app-header,
+body.ft-kiosk .sidebar,
+body.ft-kiosk .sidebar-expand-btn,
+body.ft-kiosk .tool-rail,
+body.ft-kiosk #checklistPanel,
+body.ft-kiosk #connectHint,
+body.ft-kiosk #legendPanel,
+body.ft-kiosk .empty-actions {
+    display: none !important;
+}
+
+/* With the header gone the canvas takes the whole viewport. */
+body.ft-kiosk .app-body {
+    height: 100vh;
+}
+
+.ft-kiosk-exit {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    margin: 0;
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    opacity: 0.4;
+    z-index: 900;
+}
+
+.ft-kiosk-exit:hover,
+.ft-kiosk-exit:focus-visible {
+    opacity: 1;
+    color: var(--text);
+}

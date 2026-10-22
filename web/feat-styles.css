@@ -1,0 +1,67 @@
+/* Feature module: tree styles. */
+
+.ft-style-dialog {
+    max-width: 400px;
+}
+
+.ft-style-group {
+    border: none;
+    margin: 0 0 14px;
+    padding: 0;
+}
+
+.ft-style-group legend {
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0;
+    margin-bottom: 6px;
+}
+
+.ft-style-option {
+    display: grid;
+    grid-template-columns: 18px 1fr;
+    grid-template-areas: "radio label" ". hint";
+    column-gap: 9px;
+    align-items: center;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    background: var(--surface);
+}
+
+.ft-style-option:hover {
+    background: var(--surface-2);
+}
+
+.ft-style-option.is-active {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+.ft-style-option input[type="radio"] {
+    grid-area: radio;
+    margin: 0;
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    padding: 0;
+}
+
+.ft-style-label {
+    grid-area: label;
+    font-weight: 600;
+    font-size: 0.9em;
+}
+
+.ft-style-hint {
+    grid-area: hint;
+    font-size: 0.78em;
+    line-height: 1.4;
+    color: var(--muted);
+    margin-top: 2px;
+}
