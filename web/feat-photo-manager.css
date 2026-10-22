@@ -1,0 +1,76 @@
+/* Feature module: the photo manager. */
+
+.ft-photos-dialog {
+    width: min(680px, calc(100vw - 32px));
+    max-width: 680px;
+}
+
+.ft-photo-summary {
+    font-size: 0.82em;
+    color: var(--muted);
+    margin: 0 0 10px;
+}
+
+.ft-photo-grid {
+    list-style: none;
+    margin: 0 0 12px;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+    max-height: 52vh;
+    overflow-y: auto;
+}
+
+.ft-photo-card {
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    overflow: hidden;
+    background: var(--surface);
+    display: grid;
+    grid-template-rows: auto 1fr;
+}
+
+.ft-photo-card.is-orphan {
+    border-style: dashed;
+}
+
+.ft-photo-thumb img {
+    display: block;
+    width: 100%;
+    height: 96px;
+    object-fit: cover;
+    background: var(--surface-2);
+}
+
+.ft-photo-meta {
+    display: grid;
+    gap: 3px;
+    padding: 7px 9px 9px;
+}
+
+.ft-photo-name {
+    font-size: 0.76em;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ft-photo-size,
+.ft-photo-use {
+    font-size: 0.72em;
+    color: var(--muted);
+}
+
+.ft-photo-orphan {
+    font-size: 0.72em;
+    color: #b8860b;
+}
+
+.ft-photo-users {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 2px;
+}

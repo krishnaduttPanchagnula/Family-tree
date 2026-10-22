@@ -1,0 +1,15 @@
+/* Feature module: a blank family tree worksheet. */
+
+.ft-sheet-dialog {
+    width: min(460px, calc(100vw - 32px));
+    max-width: 460px;
+}
+
+.ft-sheet-dialog .field-label {
+    margin-top: 10px;
+}
+
+.ft-sheet-dialog input[type="text"],
+.ft-sheet-dialog select {
+    width: 100%;
+}

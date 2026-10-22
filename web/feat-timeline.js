@@ -25,6 +25,62 @@
     var kindFilter = {};       // kind -> false when switched off
     var textFilter = '';
 
+    // The family timeline can be limited to a stretch of years, and it can
+    // be grouped by generation instead of by year.
+    var RANGE_KEY = 'familytree.timelineRange';
+    var RANGES = [
+        { value: 'all', label: 'All the years' },
+        { value: '1800', label: 'The 1800s' },
+        { value: '1900-1949', label: '1900 to 1949' },
+        { value: '1950-1999', label: '1950 to 1999' },
+        { value: '2000', label: '2000 and later' },
+        { value: 'custom', label: 'My own years' }
+    ];
+    var rangePreset = 'all';
+    var rangeFrom = '';
+    var rangeTo = '';
+    var groupByGeneration = false;
+
+    function loadRange() {
+        try {
+            var stored = JSON.parse(localStorage.getItem(RANGE_KEY) || '{}');
+            if (stored.preset) rangePreset = stored.preset;
+            if (typeof stored.from === 'string') rangeFrom = stored.from;
+            if (typeof stored.to === 'string') rangeTo = stored.to;
+            groupByGeneration = !!stored.group;
+        } catch (err) { /* the defaults are fine */ }
+    }
+
+    function saveRange() {
+        try {
+            localStorage.setItem(RANGE_KEY, JSON.stringify({
+                preset: rangePreset, from: rangeFrom, to: rangeTo, group: groupByGeneration
+            }));
+        } catch (err) { /* the browser may refuse to store it */ }
+    }
+
+    function rangeBounds() {
+        if (rangePreset === 'all') return null;
+        if (rangePreset === 'custom') {
+            var from = Number(rangeFrom);
+            var to = Number(rangeTo);
+            if (!from && !to) return null;
+            return { from: from || 0, to: to || 9999 };
+        }
+        if (rangePreset === '1800') return { from: 1800, to: 1899 };
+        if (rangePreset === '2000') return { from: 2000, to: 9999 };
+        var parts = rangePreset.split('-');
+        return { from: Number(parts[0]), to: Number(parts[1]) };
+    }
+
+    function inRange(ev) {
+        var bounds = rangeBounds();
+        if (!bounds) return true;
+        var parsed = parseEventDate(ev.date);
+        if (!parsed) return false; // an undated event cannot fall in a range
+        return parsed.year >= bounds.from && parsed.year <= bounds.to;
+    }
+
     // --- small helpers -------------------------------------------------
     function icon(name) {
         return '<svg class="icon" aria-hidden="true"><use href="#i-' + name + '"/></svg>';
@@ -343,6 +399,18 @@
                     '<label class="sr-only" for="ftTlSearch">Filter events</label>' +
                     '<input type="search" id="ftTlSearch" class="ft-tl-search" placeholder="Filter by name, place, title or note" autocomplete="off" spellcheck="false">' +
                     '<div class="ft-tl-kinds" id="ftTlKinds" role="group" aria-label="Filter by event kind"></div>' +
+                    '<div class="ft-tl-range">' +
+                        '<label class="sr-only" for="ftTlRange">Years</label>' +
+                        '<select id="ftTlRange">' + RANGES.map(function (range) {
+                            return '<option value="' + range.value + '"' + (range.value === rangePreset ? ' selected' : '') + '>' +
+                                escText(range.label) + '</option>';
+                        }).join('') + '</select>' +
+                        '<input type="number" id="ftTlFrom" placeholder="from" value="' + escAttr(rangeFrom) + '" aria-label="From year"' +
+                            (rangePreset === 'custom' ? '' : ' hidden') + '>' +
+                        '<input type="number" id="ftTlTo" placeholder="to" value="' + escAttr(rangeTo) + '" aria-label="To year"' +
+                            (rangePreset === 'custom' ? '' : ' hidden') + '>' +
+                        '<label class="ft-tl-group-toggle"><input type="checkbox" id="ftTlGroup"' + (groupByGeneration ? ' checked' : '') + '> Group by generation</label>' +
+                    '</div>' +
                     '<div class="ft-tl-fam" id="ftTlList"></div>' +
                     '<div class="dialog-actions">' +
                         '<button type="button" class="btn-secondary" data-ft-action="close-family-timeline">Close</button>' +
@@ -392,6 +460,23 @@
             return '<p class="ft-tl-empty">No events match these filters.</p>';
         }
 
+        if (groupByGeneration) {
+            var byGeneration = new Map();
+            events.forEach(function (ev) {
+                var key = generationLabel(ev.person_id) || 'Other';
+                if (!byGeneration.has(key)) byGeneration.set(key, []);
+                byGeneration.get(key).push(ev);
+            });
+            var generationKeys = Array.from(byGeneration.keys()).sort();
+            return generationKeys.map(function (key) {
+                var items = byGeneration.get(key).sort(compareEvents);
+                return '<section class="ft-tl-group">' +
+                    '<h4 class="ft-tl-year">' + escText(key) + '</h4>' +
+                    '<ul class="ft-tl-fam-list">' + items.map(familyRowMarkup).join('') + '</ul>' +
+                    '</section>';
+            }).join('');
+        }
+
         var groups = new Map();
         events.forEach(function (ev) {
             var parsed = parseEventDate(ev.date);
@@ -439,6 +524,9 @@
             '<button type="button" class="ft-tl-kind-btn ft-tl-kind-reset" data-ft-action="reset-family-filters">Show all</button>';
 
         var filtered = textMatched.filter(function (ev) { return kindFilter[normKind(ev.kind)] !== false; });
+        var inRangeCount = filtered.filter(inRange).length;
+        var hidden = filtered.length - inRangeCount;
+        filtered = filtered.filter(inRange);
 
         var people = {};
         filtered.forEach(function (ev) { people[ev.person_id] = true; });
@@ -446,7 +534,8 @@
 
         summary.textContent = filtered.length
             ? filtered.length + (filtered.length === 1 ? ' event' : ' events') + ' across ' +
-              personCount + (personCount === 1 ? ' person' : ' people') + '.'
+              personCount + (personCount === 1 ? ' person' : ' people') + '.' +
+              (hidden ? ' ' + hidden + ' outside the chosen years.' : '')
             : 'No events to show yet. Add life events from a person’s Events tab.';
 
         list.innerHTML = renderFamilyGroups(filtered);
@@ -602,9 +691,31 @@
 
     function onInput(event) {
         var target = event.target;
-        if (!target || target.id !== 'ftTlSearch') return;
-        textFilter = String(target.value || '');
-        renderFamilyTimeline();
+        if (!target) return;
+
+        if (target.id === 'ftTlSearch') {
+            textFilter = String(target.value || '');
+            renderFamilyTimeline();
+            return;
+        }
+        if (target.id === 'ftTlRange') {
+            rangePreset = String(target.value || 'all');
+            saveRange();
+            renderFamilyTimeline();
+            return;
+        }
+        if (target.id === 'ftTlFrom' || target.id === 'ftTlTo') {
+            rangeFrom = target.id === 'ftTlFrom' ? String(target.value || '') : rangeFrom;
+            rangeTo = target.id === 'ftTlTo' ? String(target.value || '') : rangeTo;
+            saveRange();
+            renderFamilyTimeline();
+            return;
+        }
+        if (target.id === 'ftTlGroup') {
+            groupByGeneration = !!target.checked;
+            saveRange();
+            renderFamilyTimeline();
+        }
     }
 
     function injectStylesheet() {
@@ -620,9 +731,11 @@
     function start() {
         injectStylesheet();
         injectDialog();
+        loadRange();
         document.addEventListener('click', onClick);
         document.addEventListener('submit', onSubmit);
         document.addEventListener('input', onInput);
+        document.addEventListener('change', onInput);
         renderEventsPanel();
         refreshEvents().then(renderEventsPanel);
     }

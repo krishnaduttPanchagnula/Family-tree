@@ -1,0 +1,67 @@
+/* Feature module: media on life events. */
+
+.ft-media-event {
+    border-top: 1px solid var(--border);
+    padding: 9px 0;
+}
+
+.ft-media-event:first-child {
+    border-top: none;
+    padding-top: 0;
+}
+
+.ft-media-event-title {
+    margin: 0 0 6px;
+    font-size: 0.8em;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: capitalize;
+}
+
+.ft-media-list {
+    list-style: none;
+    margin: 0 0 6px;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.ft-media {
+    display: grid;
+    gap: 3px;
+    justify-items: start;
+    max-width: 120px;
+}
+
+.ft-media-thumb img {
+    width: 96px;
+    height: 72px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    display: block;
+}
+
+.ft-media-file {
+    font-size: 0.78em;
+    color: var(--accent);
+}
+
+.ft-media-caption {
+    font-size: 0.72em;
+    color: var(--muted);
+    line-height: 1.3;
+}
+
+.ft-media-add {
+    display: inline-block;
+    cursor: pointer;
+}
+
+.ft-media-add input[type="file"] {
+    display: block;
+    font-size: 0.72em;
+    margin-top: 4px;
+    max-width: 200px;
+}

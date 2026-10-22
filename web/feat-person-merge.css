@@ -1,0 +1,102 @@
+/* Feature module: merging two people. */
+
+.ft-merge-dialog {
+    width: min(560px, calc(100vw - 32px));
+    max-width: 560px;
+}
+
+.ft-merge-list {
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 0;
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.ft-merge-person {
+    display: grid;
+    gap: 1px;
+    width: 100%;
+    text-align: left;
+    padding: 7px 10px;
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+}
+
+.ft-merge-person:last-child {
+    border-bottom: none;
+}
+
+.ft-merge-person:hover {
+    background: var(--surface-2);
+}
+
+.ft-merge-name {
+    font-size: 0.88em;
+    font-weight: 600;
+}
+
+.ft-merge-meta {
+    font-size: 0.75em;
+    color: var(--muted);
+}
+
+.ft-merge-empty {
+    padding: 10px;
+    font-size: 0.82em;
+    color: var(--muted);
+}
+
+.ft-merge-summary {
+    font-size: 0.84em;
+    line-height: 1.5;
+    margin: 0 0 10px;
+}
+
+.ft-merge-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 12px;
+}
+
+.ft-merge-table th,
+.ft-merge-table td {
+    text-align: left;
+    vertical-align: top;
+    padding: 6px 4px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.82em;
+    font-weight: 400;
+}
+
+.ft-merge-table thead th {
+    font-size: 0.7em;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+}
+
+.ft-merge-values {
+    display: grid;
+    gap: 4px;
+}
+
+.ft-merge-choice {
+    display: grid;
+    grid-template-columns: 16px 1fr;
+    gap: 7px;
+    align-items: center;
+    cursor: pointer;
+}
+
+.ft-merge-choice input {
+    margin: 0;
+    width: 15px;
+    height: 15px;
+}

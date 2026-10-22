@@ -1,0 +1,14 @@
+/* Feature module: printable reports. */
+
+.ft-report-dialog {
+    width: min(520px, calc(100vw - 32px));
+    max-width: 520px;
+}
+
+.ft-report-dialog .field-label {
+    margin-top: 10px;
+}
+
+.ft-report-dialog select {
+    width: 100%;
+}

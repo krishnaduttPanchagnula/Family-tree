@@ -1,0 +1,28 @@
+/* Feature module: start fresh. */
+
+.ft-wipe-dialog {
+    width: min(520px, calc(100vw - 32px));
+    max-width: 520px;
+}
+
+.ft-wipe-copy {
+    font-size: 0.84em;
+    line-height: 1.5;
+    margin: 0 0 10px;
+}
+
+.ft-wipe-check {
+    display: grid;
+    grid-template-columns: 16px 1fr;
+    gap: 8px;
+    align-items: center;
+    font-size: 0.84em;
+    margin-bottom: 12px;
+    cursor: pointer;
+}
+
+.ft-wipe-check input {
+    margin: 0;
+    width: 15px;
+    height: 15px;
+}

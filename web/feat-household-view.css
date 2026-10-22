@@ -1,0 +1,6 @@
+/* Feature module: the household layout. */
+
+.ft-household-dialog {
+    width: min(460px, calc(100vw - 32px));
+    max-width: 460px;
+}

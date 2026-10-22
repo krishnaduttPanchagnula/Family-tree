@@ -413,3 +413,43 @@
     .ft-tl-fam-person { grid-column: 1 / -1; grid-row: 2; }
     .ft-tl-fam-details { grid-column: 1 / -1; grid-row: 3; }
 }
+
+/* The year range of the family timeline. */
+
+.ft-tl-range {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 0 0 10px;
+}
+
+.ft-tl-range select,
+.ft-tl-range input[type="number"] {
+    font: inherit;
+    font-size: 0.8em;
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--surface);
+    color: var(--text);
+}
+
+.ft-tl-range input[type="number"] {
+    width: 82px;
+}
+
+.ft-tl-group-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78em;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.ft-tl-group-toggle input {
+    margin: 0;
+    width: 14px;
+    height: 14px;
+}

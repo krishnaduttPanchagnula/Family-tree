@@ -1,0 +1,52 @@
+/* Feature module: search filters. */
+
+.ft-filter-btn {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.ft-filter-btn:hover {
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.ft-filter-btn.active {
+    color: var(--accent);
+}
+
+.ft-filter-btn .icon {
+    width: 16px;
+    height: 16px;
+}
+
+.ft-filter-dot {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+}
+
+.ft-filters-dialog {
+    width: min(380px, calc(100vw - 32px));
+    max-width: 380px;
+}
+
+.ft-filters-dialog .field-label {
+    margin-top: 10px;
+}
+
+.ft-filters-dialog select {
+    width: 100%;
+}

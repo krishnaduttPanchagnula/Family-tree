@@ -1,0 +1,64 @@
+/* Feature module: this month in the family. */
+
+.ft-cal-dialog {
+    width: min(520px, calc(100vw - 32px));
+    max-width: 520px;
+}
+
+.ft-cal-nav {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.ft-cal-month {
+    font-family: var(--font-display, Georgia, serif);
+    font-size: 1.05em;
+    font-weight: 600;
+    min-width: 140px;
+    text-align: center;
+}
+
+.ft-cal-nav-btn {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    border-radius: 7px;
+    width: 30px;
+    height: 30px;
+    cursor: pointer;
+    font-size: 0.95em;
+}
+
+.ft-cal-nav-btn:hover {
+    background: var(--surface-2);
+}
+
+.ft-cal-heading {
+    margin: 14px 0 6px;
+    font-size: 0.72em;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+}
+
+.ft-cal-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+}
+
+.ft-cal-list li {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+}
+
+.ft-cal-extra {
+    font-size: 0.76em;
+    color: var(--muted);
+}

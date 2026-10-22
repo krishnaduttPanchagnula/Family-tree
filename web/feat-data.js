@@ -359,10 +359,54 @@
     }
 
     // --- import / export ------------------------------------------------
-    function importGedcom(file) {
+    function showImportDuplicates(duplicates, skipped, file) {
+        var FT = window.FT;
+        if (!FT) return;
+
+        var skippedRows = duplicates.filter(function (item) { return item.severity === 'duplicate'; });
+        var warnedRows = duplicates.filter(function (item) { return item.severity !== 'duplicate'; });
+
+        var dialog = FT.dialog({
+            id: 'ftImportDupesDialog',
+            className: 'ft-import-dupes-dialog',
+            title: 'People who are already in the tree',
+            copy: skippedRows.length
+                ? skippedRows.length + ' ' + plural(skippedRows.length, 'person', 'people') + ' from the file ' +
+                  (skippedRows.length === 1 ? 'was' : 'were') + ' kept as the record you already had.'
+                : 'Somebody from the file looks a lot like somebody you already have.'
+        });
+
+        var body = FT.body(dialog);
+        body.innerHTML =
+            '<ul class="ft-import-dupes">' + duplicates.map(function (item) {
+                return '<li class="ft-import-dupe' + (item.severity === 'duplicate' ? ' is-same' : '') + '">' +
+                    '<span class="ft-import-dupe-name">' + escText(item.name || 'Someone') + '</span>' +
+                    (item.dob ? '<span class="ft-import-dupe-meta">' + escText(item.dob) + '</span>' : '') +
+                    (item.existing_name ? '<span class="ft-import-dupe-meta">already in the tree as ' + escText(item.existing_name) + '</span>' : '') +
+                    '<span class="ft-import-dupe-reason">' + escText(item.reason || '') + '</span>' +
+                    '</li>';
+            }).join('') + '</ul>' +
+            (warnedRows.length
+                ? '<p class="ft-panel-empty">The ones marked as a warning were imported anyway, because the dates do not match exactly.</p>'
+                : '') +
+            '<p class="ft-panel-empty">Merge the two records afterwards with the merge tool in the Family tab.</p>';
+
+        FT.resetActions(dialog);
+        FT.action(dialog, 'Keep the tree as it is', 'btn-secondary', function () {
+            FT.close(dialog);
+        });
+        FT.action(dialog, 'Import them anyway', 'btn-primary', function () {
+            FT.close(dialog);
+            importGedcom(file, true);
+        });
+        FT.open(dialog);
+    }
+
+    function importGedcom(file, allowDuplicates) {
         if (!file) return Promise.resolve();
         var form = new FormData();
         form.append('file', file);
+        if (allowDuplicates) form.append('allow_duplicates', '1');
 
         setStatus('import-status', 'Importing ' + file.name + '…', false);
         var warningLists = document.querySelectorAll('[data-ft-role="import-warnings"]');
@@ -382,8 +426,11 @@
                 var people = Number(data.persons) || 0;
                 var connections = Number(data.relationships) || 0;
                 var warnings = Array.isArray(data.warnings) ? data.warnings : [];
+                var duplicates = Array.isArray(data.duplicates) ? data.duplicates : [];
+                var skipped = Number(data.skipped) || 0;
                 setStatus('import-status', 'Imported ' + people + ' ' + plural(people, 'person', 'people') +
-                    ' and ' + connections + ' ' + plural(connections, 'connection', 'connections') + '.', false);
+                    ' and ' + connections + ' ' + plural(connections, 'connection', 'connections') + '.' +
+                    (skipped ? ' ' + skipped + ' ' + plural(skipped, 'person', 'people') + ' already existed.' : ''), false);
                 warningLists.forEach(function (list) {
                     if (!warnings.length) { list.hidden = true; list.innerHTML = ''; return; }
                     list.innerHTML = warnings.map(function (warning) {
@@ -391,6 +438,7 @@
                     }).join('');
                     list.hidden = false;
                 });
+                if (duplicates.length) showImportDuplicates(duplicates, skipped, file);
                 return window.loadTree();
             })
             .then(function () {
