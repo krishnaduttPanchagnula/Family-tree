@@ -45,7 +45,8 @@ it — still entirely on your own machine.
 ### Looking at the tree
 
 - **This month in the family**: the birthdays, the anniversaries and the days
-  worth remembering, with the people a click away.
+  worth remembering, each as a list of the person, the event and the date, with
+  the people a click away.
 - **Search filters**: narrow the search by living or deceased, with or without
   a photo, by decade of birth, and by the branch of the tree around the
   person you selected. The filters are remembered.

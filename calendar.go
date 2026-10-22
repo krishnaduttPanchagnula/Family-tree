@@ -90,6 +90,21 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 	for _, p := range persons {
 		names[p.ID] = p.Name
 	}
+	// The partners of a person, so a marriage anniversary can name both of
+	// them and not only the person the event happens to belong to.
+	partners := map[int][]int{}
+	rels, err := fetchAllRelationships()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	for _, rel := range rels {
+		if strings.ToLower(strings.TrimSpace(rel.Relation)) != "spouse" {
+			continue
+		}
+		partners[rel.Person1ID] = append(partners[rel.Person1ID], rel.Person2ID)
+		partners[rel.Person2ID] = append(partners[rel.Person2ID], rel.Person1ID)
+	}
 
 	for _, p := range persons {
 		date, ok := parsePartialDate(p.DOB)
@@ -130,8 +145,16 @@ func handleCalendar(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if ev.Kind == "marriage" {
+			personIDs := []int{ev.PersonID}
+			anniversaryNames := []string{names[ev.PersonID]}
+			for _, partnerID := range partners[ev.PersonID] {
+				if name, ok := names[partnerID]; ok {
+					personIDs = append(personIDs, partnerID)
+					anniversaryNames = append(anniversaryNames, name)
+				}
+			}
 			anniversary := CalendarAnniversary{
-				PersonIDs: []int{ev.PersonID}, Names: []string{names[ev.PersonID]},
+				PersonIDs: personIDs, Names: anniversaryNames,
 				Date: ev.Date, Day: date.day, Years: year - date.year, EventID: ev.ID, Place: ev.Place,
 			}
 			if anniversary.Years < 0 {

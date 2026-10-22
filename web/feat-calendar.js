@@ -26,9 +26,30 @@
         return names[Number(parts[1]) - 1] + ' ' + parts[0];
     }
 
-    function personButton(id, name, extra) {
-        return '<button type="button" class="ft-find-person" data-person="' + id + '">' +
-            FT.esc(name) + '</button>' + (extra ? ' <span class="ft-cal-extra">' + FT.esc(extra) + '</span>' : '');
+    // The dates are shown the way the rest of the app shows them.
+    function displayDate(value) {
+        if (!value) return '';
+        if (typeof formatDate === 'function') return formatDate(value);
+        return value;
+    }
+
+    function eventLabel(kind) {
+        var text = String(kind || 'event');
+        return text.charAt(0).toUpperCase() + text.slice(1);
+    }
+
+    // Every row is the same three things: who it is about, what happened,
+    // and when.
+    function row(id, name, event, date, extra) {
+        return '<li class="ft-cal-row">' +
+            '<span class="ft-cal-name">' +
+            '  <button type="button" class="ft-find-person" data-person="' + id + '">' + FT.esc(name) + '</button>' +
+            '</span>' +
+            '<span class="ft-cal-event">' + FT.esc(event) + '</span>' +
+            '<span class="ft-cal-date">' + FT.esc(date) +
+            (extra ? ' <span class="ft-cal-extra">' + FT.esc(extra) + '</span>' : '') +
+            '</span>' +
+            '</li>';
     }
 
     function render(data) {
@@ -43,7 +64,8 @@
         if (data.birthdays && data.birthdays.length) {
             html += '<h4 class="ft-cal-heading">Birthdays</h4><ul class="ft-cal-list">' +
                 data.birthdays.map(function (b) {
-                    return '<li>' + personButton(b.person_id, b.name, b.living ? 'turns ' + b.age : 'would have turned ' + b.age) + '</li>';
+                    return row(b.person_id, b.name, 'Birthday', displayDate(b.date),
+                        b.living ? 'turns ' + b.age : 'would have turned ' + b.age);
                 }).join('') + '</ul>';
         }
 
@@ -51,22 +73,23 @@
             html += '<h4 class="ft-cal-heading">Anniversaries</h4><ul class="ft-cal-list">' +
                 data.anniversaries.map(function (a) {
                     var names = (a.names || []).join(' & ');
-                    return '<li>' + personButton((a.person_ids || [])[0], names, a.years + ' years') +
-                        (a.place ? ' <span class="ft-cal-extra">' + FT.esc(a.place) + '</span>' : '') + '</li>';
+                    return row((a.person_ids || [])[0], names, 'Marriage', displayDate(a.date),
+                        (a.years ? a.years + ' years' : '') + (a.place ? ' · ' + a.place : ''));
                 }).join('') + '</ul>';
         }
 
         if (data.on_this_day && data.on_this_day.length) {
             html += '<h4 class="ft-cal-heading">On this day</h4><ul class="ft-cal-list">' +
                 data.on_this_day.map(function (e) {
-                    return '<li>' + personButton(e.person_id, e.name, e.kind + ' · ' + e.date) + '</li>';
+                    return row(e.person_id, e.name, eventLabel(e.kind), displayDate(e.date),
+                        e.years_ago ? e.years_ago + ' years ago' : '');
                 }).join('') + '</ul>';
         }
 
         if (data.incomplete && data.incomplete.length) {
             html += '<h4 class="ft-cal-heading">Day unknown</h4><ul class="ft-cal-list">' +
                 data.incomplete.map(function (i) {
-                    return '<li>' + personButton(i.person_id, i.name, i.date) + '</li>';
+                    return row(i.person_id, i.name, 'Birthday', i.date, 'day unknown');
                 }).join('') + '</ul>';
         }
 

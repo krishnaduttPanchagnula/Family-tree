@@ -323,6 +323,8 @@ func TestExportWipe(t *testing.T) {
 func TestCalendarMonth(t *testing.T) {
 	useV04DB(t)
 	person := addPerson(t, "Ada Lovelace", "1990-10-05")
+	spouse := addPerson(t, "William King", "1990-12-01")
+	addRelation(t, person, spouse, "spouse")
 	addPerson(t, "Jo Bloggs", "1990-10")
 	db.Exec(`INSERT INTO events (person_id, kind, date, place) VALUES (?, 'marriage', '2010-10-09', 'London')`, person)
 
@@ -340,6 +342,11 @@ func TestCalendarMonth(t *testing.T) {
 	}
 	if len(month.Anniversaries) != 1 || month.Anniversaries[0].Years != 16 {
 		t.Fatalf("the anniversary is missing: %+v", month.Anniversaries)
+	}
+	// The anniversary names both partners, not only the person the event
+	// happens to belong to.
+	if len(month.Anniversaries[0].Names) != 2 {
+		t.Fatalf("the anniversary does not name both partners: %+v", month.Anniversaries[0].Names)
 	}
 	if len(month.Incomplete) != 1 {
 		t.Fatalf("the date with only a month was not reported: %+v", month.Incomplete)
