@@ -12,6 +12,8 @@ jobs:
   release:
     name: Build and publish release
     runs-on: ubuntu-latest
+    # A hung package mirror should fail the run, not hold it open.
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -30,10 +32,10 @@ jobs:
 
       - name: Install cross-compilers
         run: |
-            sudo apt-get update
-            sudo apt-get install -y \
-              gcc-aarch64-linux-gnu \
-              mingw-w64
+          sudo apt-get update -o Acquire::Retries=5 -o Acquire::http::Timeout=30
+          sudo apt-get install -y --no-install-recommends \
+            gcc-aarch64-linux-gnu \
+            mingw-w64
 
       - name: Test
         run: go test ./...
