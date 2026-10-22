@@ -48,12 +48,24 @@ func handleBackupArchive(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	sources, err := fetchAllSources()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	media, err := fetchAllEventMedia()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	payload := backupPayload{
 		Version:       1,
 		ExportedAt:    time.Now().UTC().Format(time.RFC3339),
 		Persons:       persons,
 		Relationships: rels,
 		Events:        events,
+		Sources:       sources,
+		Media:         media,
 	}
 	data, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
@@ -228,12 +240,22 @@ func writeSnapshot() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	sources, err := fetchAllSources()
+	if err != nil {
+		return "", err
+	}
+	media, err := fetchAllEventMedia()
+	if err != nil {
+		return "", err
+	}
 	payload := backupPayload{
 		Version:       1,
 		ExportedAt:    time.Now().UTC().Format(time.RFC3339),
 		Persons:       persons,
 		Relationships: rels,
 		Events:        events,
+		Sources:       sources,
+		Media:         media,
 	}
 	data, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {

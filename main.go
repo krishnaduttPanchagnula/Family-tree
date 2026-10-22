@@ -91,6 +91,8 @@ func main() {
 	os.MkdirAll("./uploads", os.ModePerm) // Ensure local uploads folder exists
 	initDB()
 	initEventTable()
+	initSources()
+	initEventMedia()
 	initOauth()
 
 	http.HandleFunc("/", serveUI)
@@ -129,6 +131,25 @@ func main() {
 	http.HandleFunc("/api/gedcom", handleGEDCOMExport)
 	http.HandleFunc("/api/gedcom/import", guardWrite(handleGEDCOMImport))
 	http.HandleFunc("/api/export.csv", handleCSVExport)
+
+	// Sources: the evidence behind a person or one of their events.
+	http.HandleFunc("/api/sources", guardWrite(handleSources))
+	http.HandleFunc("/api/sources/", guardWrite(handleSourceByID)) // /api/sources/{id}
+
+	// Media attached to a life event.
+	http.HandleFunc("/api/event-media", guardWrite(handleEventMedia))
+	http.HandleFunc("/api/event-media/", guardWrite(handleEventMediaByID)) // /api/event-media/{id}
+
+	// Repairing the tree: merging two people, checking what is wrong with it,
+	// and the photos that pile up on disk.
+	http.HandleFunc("/api/persons/merge", guardWrite(handleMergePersons))
+	http.HandleFunc("/api/tree-health", guardWrite(handleTreeHealth))
+	http.HandleFunc("/api/photos", guardWrite(handlePhotos))
+
+	// Printable reports, the family calendar, and starting fresh.
+	http.HandleFunc("/api/reports/", guardWrite(handleReport))
+	http.HandleFunc("/api/calendar", guardWrite(handleCalendar))
+	http.HandleFunc("/api/wipe", guardWrite(handleWipe))
 
 	// Read-only link for showing the tree to family on the local network.
 	http.HandleFunc("/api/share", guardWrite(handleShare))
@@ -792,6 +813,8 @@ type backupPayload struct {
 	Persons       []Person       `json:"persons"`
 	Relationships []Relationship `json:"relationships"`
 	Events        []Event        `json:"events"`
+	Sources       []Source       `json:"sources,omitempty"`
+	Media         []EventMedia   `json:"event_media,omitempty"`
 }
 
 func fetchAllPersons() ([]Person, error) {
@@ -859,6 +882,9 @@ func writePayload(payload backupPayload, wipe bool) error {
 		if _, err := tx.Exec("DELETE FROM persons"); err != nil {
 			return err
 		}
+		// The evidence and the media go with the people they belong to.
+		tx.Exec("DELETE FROM sources")
+		tx.Exec("DELETE FROM event_media")
 	}
 
 	known := map[int]bool{}
@@ -949,6 +975,32 @@ func writePayload(payload backupPayload, wipe bool) error {
 	}
 	tx.Exec("DELETE FROM sqlite_sequence WHERE name = 'events'")
 	tx.Exec(`INSERT INTO sqlite_sequence (name, seq) SELECT 'events', COALESCE(MAX(id), 0) FROM events`)
+
+	// Sources and media point at people and events, so they come last.
+	for _, s := range payload.Sources {
+		if !known[s.PersonID] {
+			continue
+		}
+		tx.Exec(`INSERT INTO sources (id, person_id, event_id, kind, title, citation, url, date, note)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(id) DO UPDATE SET person_id = excluded.person_id, event_id = excluded.event_id,
+				kind = excluded.kind, title = excluded.title, citation = excluded.citation,
+				url = excluded.url, date = excluded.date, note = excluded.note`,
+			s.ID, s.PersonID, s.EventID, normaliseSourceKind(s.Kind), s.Title, s.Citation, s.URL, s.Date, s.Note)
+	}
+	for _, m := range payload.Media {
+		if !known[m.PersonID] {
+			continue
+		}
+		tx.Exec(`INSERT INTO event_media (id, event_id, person_id, kind, file_url, caption)
+			VALUES (?, ?, ?, ?, ?, ?)
+			ON CONFLICT(id) DO UPDATE SET event_id = excluded.event_id, person_id = excluded.person_id,
+				kind = excluded.kind, file_url = excluded.file_url, caption = excluded.caption`,
+			m.ID, m.EventID, m.PersonID, m.Kind, m.FileURL, m.Caption)
+	}
+	tx.Exec("DELETE FROM sqlite_sequence WHERE name IN ('sources', 'event_media')")
+	tx.Exec(`INSERT INTO sqlite_sequence (name, seq) SELECT 'sources', COALESCE(MAX(id), 0) FROM sources`)
+	tx.Exec(`INSERT INTO sqlite_sequence (name, seq) SELECT 'event_media', COALESCE(MAX(id), 0) FROM event_media`)
 
 	return tx.Commit()
 }

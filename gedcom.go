@@ -331,10 +331,35 @@ func indexOf(list []string, value string) int {
 
 // --- Import ---
 
+// ImportDuplicate is a person from an imported file who is already in the
+// tree, or who looks a lot like somebody who is.
+type ImportDuplicate struct {
+	GEDCOMID     string `json:"gedcom_id"`
+	Name         string `json:"name"`
+	DOB          string `json:"dob"`
+	ExistingID   int    `json:"existing_id"`
+	ExistingName string `json:"existing_name"`
+	Reason       string `json:"reason"`
+	Severity     string `json:"severity"` // duplicate | warning
+}
+
+// gedcomImport keeps the state of one import run.
+type gedcomImport struct {
+	allowDuplicates bool
+	duplicates      []ImportDuplicate
+	skipped         int
+}
+
 // importGEDCOM parses GEDCOM text and merges it into the tree. People are
 // matched by name and date of birth so importing the same file twice does
 // not duplicate the tree.
 func importGEDCOM(data string) (personCount int, relCount int, warnings []string, err error) {
+	run := &gedcomImport{}
+	return run.run(data)
+}
+
+// run does the work of an import and remembers the duplicates it found.
+func (g *gedcomImport) run(data string) (personCount int, relCount int, warnings []string, err error) {
 	individuals, families, parseWarnings := parseGEDCOM(data)
 	warnings = append(warnings, parseWarnings...)
 
@@ -345,14 +370,35 @@ func importGEDCOM(data string) (personCount int, relCount int, warnings []string
 		return 0, 0, warnings, err
 	}
 	byNameDate := map[string]int{}
+	byNameYear := map[string]int{}
 	for _, p := range existing {
 		byNameDate[strings.ToLower(strings.TrimSpace(p.Name))+"|"+p.DOB] = p.ID
+		if year, ok := birthYearOf(p.DOB); ok {
+			byNameYear[strings.ToLower(strings.TrimSpace(p.Name))+"|"+year] = p.ID
+		}
 	}
 
 	for _, ind := range individuals {
 		key := strings.ToLower(strings.TrimSpace(ind.name)) + "|" + ind.birthDate
 		id, found := byNameDate[key]
+		if g.allowDuplicates {
+			// The user asked for a separate copy of everyone in the file.
+			found = false
+			id = 0
+		}
 		if !found {
+			// The same name and the same birth year is worth pointing out,
+			// even when the full date is not known on both sides.
+			if year, ok := birthYearOf(ind.birthDate); ok {
+				key := strings.ToLower(strings.TrimSpace(ind.name)) + "|" + year
+				if existingID, hit := byNameYear[key]; hit {
+					g.duplicates = append(g.duplicates, ImportDuplicate{
+						GEDCOMID: ind.xref, Name: ind.name, DOB: ind.birthDate,
+						ExistingID: existingID, ExistingName: existingNameOf(existing, existingID),
+						Reason: "same name and birth year", Severity: "warning",
+					})
+				}
+			}
 			photo := ind.photo
 			res, err := db.Exec(`INSERT INTO persons (name, image_url, pos_x, pos_y, dob, dod, birth_country, profession, facts)
 				VALUES (?, ?, 0, 0, ?, ?, ?, ?, ?)`,
@@ -368,6 +414,12 @@ func importGEDCOM(data string) (personCount int, relCount int, warnings []string
 			byNameDate[key] = id
 			personCount++
 		} else {
+			g.duplicates = append(g.duplicates, ImportDuplicate{
+				GEDCOMID: ind.xref, Name: ind.name, DOB: ind.birthDate,
+				ExistingID: id, ExistingName: existingNameOf(existing, id),
+				Reason: "same name and birth date", Severity: "duplicate",
+			})
+			g.skipped++
 			// Fill in anything the local record is missing.
 			db.Exec(`UPDATE persons SET
 				dod = CASE WHEN dod = '' THEN ? ELSE dod END,
@@ -724,7 +776,8 @@ func handleGEDCOMImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	persons, rels, warnings, err := importGEDCOM(string(data))
+	run := &gedcomImport{allowDuplicates: r.FormValue("allow_duplicates") == "1"}
+	persons, rels, warnings, err := run.run(string(data))
 	if err != nil {
 		http.Error(w, "import failed: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -734,7 +787,34 @@ func handleGEDCOMImport(w http.ResponseWriter, r *http.Request) {
 		"relationships": rels,
 		"warnings":      warnings,
 		"file":          header.Filename,
+		"duplicates":    run.duplicates,
+		"skipped":       run.skipped,
 	})
+}
+
+// birthYearOf reads the year out of a date like 1815-12-10.
+func birthYearOf(dob string) (string, bool) {
+	dob = strings.TrimSpace(dob)
+	if len(dob) < 4 {
+		return "", false
+	}
+	year := dob[:4]
+	for _, r := range year {
+		if r < '0' || r > '9' {
+			return "", false
+		}
+	}
+	return year, true
+}
+
+// existingNameOf finds the name of a person that is already in the tree.
+func existingNameOf(persons []Person, id int) string {
+	for _, p := range persons {
+		if p.ID == id {
+			return p.Name
+		}
+	}
+	return ""
 }
 
 // sortedPersonNames is used by the CSV export to keep the file stable.
